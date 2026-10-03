@@ -50,4 +50,5 @@
 /* --- Fonts ---------------------------------------------------------------- */
 #define LOAD_GLCD
 #define LOAD_FONT2
+#define LOAD_FONT4
 #define SMOOTH_FONT

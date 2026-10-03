@@ -37,4 +37,10 @@ void setBacklight(uint8_t percent);
 /* Ultim percentatge aplicat amb setBacklight() (comenca a 100). */
 uint8_t backlight();
 
+/* Forca el pin de retroil-luminacio com a sortida DIGITAL (surt del mode PWM).
+ * Serveix per diagnosticar si un problema de brillantor es del pin o del PWM:
+ * si amb el pin digital tambe no canvia res, el problema es de maquinari o de
+ * pin. La seguent crida a setBacklight() hi torna (reactiva el PWM). */
+void setBacklightDigital(bool on);
+
 }  // namespace Display

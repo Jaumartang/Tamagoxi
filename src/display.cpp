@@ -72,7 +72,9 @@ void setBacklight(uint8_t percent)
     gBacklightPct = percent;
 
     const uint32_t maxDuty = (1UL << kBacklightResolution) - 1UL;
-    const uint32_t duty    = (static_cast<uint32_t>(percent) * maxDuty) / 100UL;
+    /* El pin es actiu alt; si una placa fos activa baixa s'invertiria el nivell. */
+    const uint32_t level   = BL_ACTIVE_LOW ? (100u - percent) : percent;
+    const uint32_t duty    = (level * maxDuty) / 100UL;
 
     if (!gBacklightReady) {
         ledcSetup(kBacklightChannel, kBacklightFrequency, kBacklightResolution);
@@ -80,6 +82,21 @@ void setBacklight(uint8_t percent)
         gBacklightReady = true;
     }
     ledcWrite(kBacklightChannel, duty);
+}
+
+void setBacklightDigital(bool on)
+{
+    /* Surt del mode PWM i passa a sortida digital neta. El seguent
+     * setBacklight() torna a activar el PWM (gBacklightReady = false). */
+    if (gBacklightReady) {
+        ledcDetachPin(TFT_BL);
+        gBacklightReady = false;
+    }
+    pinMode(TFT_BL, OUTPUT);
+    const int onLevel  = BL_ACTIVE_LOW ? LOW  : HIGH;
+    const int offLevel = BL_ACTIVE_LOW ? HIGH : LOW;
+    digitalWrite(TFT_BL, on ? onLevel : offLevel);
+    gBacklightPct = on ? 100 : 0;
 }
 
 uint8_t backlight()

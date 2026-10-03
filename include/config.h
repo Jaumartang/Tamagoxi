@@ -31,3 +31,30 @@ static constexpr uint32_t LED_TEST_STEP_MS = 800;
 
 /* Cada quan s'escriu l'estat de memoria pel port serie. */
 static constexpr uint32_t HEAP_LOG_INTERVAL_MS = 5000;
+
+/* --- Retroil-luminacio ---------------------------------------------------- */
+/* A la placa ESP32-32E el backlight va al GPIO 27 i es ACTIU ALT (HIGH =
+ * ences). Confirmat a la documentacio de la placa i a projectes de referencia
+ * del mateix maquinari. Si algun dia una placa el portes actiu baix, nomes cal
+ * canviar aquesta constant. */
+static constexpr bool BL_ACTIVE_LOW = false;
+
+/* --- Tactil XPT2046 ------------------------------------------------------- */
+/* Llindar de pressio (z) per sobre del qual una lectura es considera un dit.
+ * Ajustable en calent des de la consola serie amb 'tth <n>'. */
+static constexpr uint16_t TOUCH_DEFAULT_PRESSURE = 400;
+/* Com a maxim una lectura del panell cada aquests ms. */
+static constexpr uint32_t TOUCH_MIN_READ_INTERVAL_MS = 15;
+/* Diferencia maxima (en unitats crues) entre mostres seguides per considerar
+ * que son el mateix punt (filtre de soroll electric del panell resistiu). */
+static constexpr int32_t TOUCH_RAW_TOLERANCE = 40;
+
+/* --- Consola serie -------------------------------------------------------- */
+static constexpr size_t CONSOLE_LINE_MAX = 48;
+
+/* --- Diagnostica de retroil-luminacio a l'arrencada ----------------------- */
+/* Fa un test visible de pin digital (OFF/ON) i despres de PWM (0/25/50/100 %)
+ * per confirmar que el backlight respon i amb quina polaritat. */
+static constexpr bool     BL_DIAG_ON_BOOT    = true;
+static constexpr uint32_t BL_DIAG_DIGITAL_MS = 900;
+static constexpr uint32_t BL_DIAG_PWM_MS     = 700;

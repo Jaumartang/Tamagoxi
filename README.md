@@ -49,21 +49,36 @@ Copia el contingut de `tamagochi_sd/` **a l'arrel** d'una targeta formatejada en
 - Sprite: `128×128` → **32.768 bytes** per frame (transparent = `0xF81F`).
 - Tots els `.bin` són **RGB565 big-endian, píxels crus, sense capçalera**.
 
-## Què hauries de veure a la Fase 0
+## Bring-up de maquinari (Fase 0+): tàctil, backlight i consola sèrie
 
-En arrencar, pel monitor sèrie:
+En arrencar:
 
-- `=== Tamagoxi v2 - Fase 0: test de maquinari ===`
-- `[GFX] ST7796S 320x480 a punt (HSPI, LCD_CS=15, DC=2, RST=-1)`
-- `[LED] …` canviant de color cada 800 ms
-- `[SYS] up=…s heap=… maxAlloc=… minFree=…` cada 5 s
+- Pel sèrie: `=== Tamagoxi v2 - bring-up ... ===`, `[GFX] ST7796S 320x480 ...`,
+  `[Touch] XPT2046 a punt ...`.
+- **Diagnòstic de retroil·luminació**: la pantalla fa FOSC / ENCESA (pin digital)
+  i després una escala PWM 0 / 25 / 50 / 100 % (mira si la brillantor canvia).
+- Si la placa no té calibratge desat, mostra "Toca la pantalla per calibrar" i
+  fa l'assistent de 4 fletxes (es desa a NVS).
+- Pantalla **TEST TÀCTIL**: un reticle verd segueix el dit i es veuen les
+  coordenades (PX i RAW). El botó gran **CALIBRAR** torna a fer la calibració.
 
-A la pantalla:
+### Consola sèrie (115200 baud)
 
-- 8 franges de colors (VERMELL, VERD, BLAU, GROC, CIAN, MAGENTA, BLANC, GRIS)
-  amb una capçalera i un marc blanc.
-- El LED RGB de la placa ha de parpellejar en vermell, verd, blau, blanc, groc.
-- La retroil·luminació fa una rampa suau durant 12 s i després queda al 100 %.
+| Comanda | Efecte |
+|---|---|
+| `bl <0-100>` | Fixa la brillantor de la retroil·luminació (0 = fosca) |
+| `bltest` | Repeteix el diagnòstic digital + PWM del backlight |
+| `loaddemo` | Demostra el patró "backlight a 0 mentre es carrega el fons" |
+| `cal` | Executa la calibració del tàctil |
+| `touch` | Redibuixa la pantalla de test tàctil |
+| `colortest` | Franges de colors (per verificar l'ordre RGB/BGR) |
+| `tth <n>` | Llindar de pressió del tàctil (per defecte 400) |
+| `info` | Estat: heap, backlight, tàctil |
+
+> **Backlight a 0 durant la càrrega del fons (per a la Fase 2):** el patró és
+> posar `Display::setBacklight(0)` abans de pintar el fons per franges i
+> `Display::setBacklight(100)` quan tot el fons ja és a la pantalla. Ho demostra
+> `runLoadDemo()` / la comanda `loaddemo`.
 
 ## Resolució de problemes
 
@@ -86,8 +101,8 @@ està al `.gitignore` i **no** es puja mai al repositori.
 
 ```
 include/  pins.h (mapa de pins)  tft_setup.h (TFT_eSPI)  config.h  secrets.example.h
-src/      main.cpp  display.*  led.*
+src/      main.cpp  display.*  led.*  touch.*
 ```
 
 Les fases següents hi afegeixen: `sd_assets`, `bg_renderer`, `sprite_renderer`,
-`pet`, `ui`, `touch`, `weather`, `storage`.
+`pet`, `ui`, `weather`, `storage`.
