@@ -309,10 +309,12 @@ void drawPetOverlay()
     t.setTextColor(TFT_YELLOW, TFT_BLACK);
     const uint32_t avg = s.totalFrames ? (s.totalMs / s.totalFrames) : 0;
     char buf[64];
-    snprintf(buf, sizeof(buf), "%s f%u/%u  %lums avg%lu  fps~%lu",
-             s.anim, static_cast<unsigned>(s.frameIndex + 1), static_cast<unsigned>(s.frameCount),
-             static_cast<unsigned long>(s.lastFrameMs), static_cast<unsigned long>(avg),
-             avg ? static_cast<unsigned long>(1000 / avg) : 0);
+    snprintf(buf, sizeof(buf), "%s x%u f%u/%u %lums fps~%lu (%d,%d)",
+             s.anim, static_cast<unsigned>(SpriteRenderer::scale()),
+             static_cast<unsigned>(s.frameIndex + 1), static_cast<unsigned>(s.frameCount),
+             static_cast<unsigned long>(s.lastFrameMs),
+             avg ? static_cast<unsigned long>(1000 / avg) : 0,
+             s.x, s.y);
     t.drawString(buf, 4, 3);
     t.setTextColor(TFT_WHITE, TFT_BLACK);
 }
@@ -343,6 +345,19 @@ void startPetTest(const char* bgName)
     Serial.printf("[PET] prova: fons=%s anim=%s primer frame %lu ms\n",
                   bgName, SpriteRenderer::animationName(),
                   static_cast<unsigned long>(ms));
+}
+
+/* Redibuixa el fons sencer + la mascota (quan canvia la mida o la posicio). */
+void redrawPetTest()
+{
+    if (!SpriteRenderer::isActive()) {
+        return;
+    }
+    Display::setBacklight(0);
+    BgRenderer::drawFull(SpriteRenderer::backgroundName());
+    Display::setBacklight(100);
+    SpriteRenderer::drawFrame();
+    drawPetOverlay();
 }
 
 /* --- Pantalles de la targeta SD ------------------------------------------- */
@@ -454,7 +469,7 @@ void printHelp()
 {
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
-                     "| pet [bg] | anim <NAME|next>"));
+                     "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center"));
 }
 
 void printInfo()
@@ -558,6 +573,35 @@ void handleCommand(char* cmd)
         } else {
             Serial.println(F("[PET] la mascota no esta activa (fes 'pet' primer)"));
         }
+    } else if (strcmp(cmd, "petscale") == 0) {
+        if (arg != nullptr) {
+            SpriteRenderer::setScale(static_cast<uint8_t>(atoi(arg)));
+        }
+        redrawPetTest();
+        Serial.printf("[PET] scale=%u box=%ux%u pos=(%d,%d)\n",
+                      static_cast<unsigned>(SpriteRenderer::scale()),
+                      static_cast<unsigned>(SpriteRenderer::status().boxW),
+                      static_cast<unsigned>(SpriteRenderer::status().boxH),
+                      SpriteRenderer::status().x, SpriteRenderer::status().y);
+    } else if (strcmp(cmd, "petpos") == 0) {
+        if (arg == nullptr) {
+            Serial.println(F("[PET] us: petpos <x> <y> | petpos center"));
+        } else if (strcmp(arg, "center") == 0) {
+            SpriteRenderer::centerX();
+        } else {
+            int px = 0;
+            int py = 0;
+            if (sscanf(arg, "%d %d", &px, &py) == 2) {
+                SpriteRenderer::setPosition(static_cast<int16_t>(px), static_cast<int16_t>(py));
+            } else {
+                Serial.println(F("[PET] us: petpos <x> <y> | petpos center"));
+            }
+        }
+        redrawPetTest();
+        Serial.printf("[PET] pos=(%d,%d) box=%ux%u\n",
+                      SpriteRenderer::status().x, SpriteRenderer::status().y,
+                      static_cast<unsigned>(SpriteRenderer::status().boxW),
+                      static_cast<unsigned>(SpriteRenderer::status().boxH));
     } else if (strcmp(cmd, "sd") == 0) {
         gScreen = Screen::Static;
         SdAssets::begin();

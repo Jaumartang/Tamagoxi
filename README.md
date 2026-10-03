@@ -11,8 +11,13 @@ lògica del joc.
 
 - Fons complet `320×480` (307.200 B) per franges de 24 files: **~271 ms**
   (lectura SD ~204 ms → 1,5 MB/s; push a pantalla ~67 ms → 4,6 MB/s).
-- Frame de la mascota `256×256` (compost amb el fons llegit de la SD, mode
-  **streaming**): **~145 ms → ~6,9 fps** (min 145 / max 146 ms), heap estable.
+- Frame de la mascota (compost amb el fons llegit de la SD, mode **streaming**):
+  escala 2 (`256×256`) **~148 ms → ~6,7 fps**; escala 1 (`128×128`) **~65 ms →
+  ~15 fps**. Heap estable.
+- Píxel transparent: `0xF81F` al fitxer (big-endian); en memòria little-endian
+  es compara contra el valor byte-swapat `0x1FF8`.
+- Escala i posició de la mascota: `PET_SCALE`, `PET_AREA_TOP`, `PET_OFFSET_X`
+  a `config.h`, ajustables en calent amb `petscale` i `petpos`.
 - La lectura de la SD és el coll d'ampolla (depèn de la targeta; una targeta
   moderna/Class 10 va més de pressa).
 - Patró de càrrega: mentre es pinta un fons, la retroil·luminació es posa a 0
@@ -97,6 +102,8 @@ En arrencar:
 | `bg <name\|next\|N>` | Mostra un fons concret, el següent o el número N |
 | `pet [bg]` | Mostra la mascota animada sobre un fons (per defecte `PET_TEST_BG`) |
 | `anim <NAME\|next>` | Canvia l'animació de la mascota |
+| `petscale <1-3>` | Canvia la mida de la mascota (limitada al que cap a la pantalla) |
+| `petpos <x> <y>\|center` | Mou la mascota (cantó superior-esquerre) o la centra horitzontalment |
 | `bench [name]` | Mesura lectura SD vs push a pantalla d'un fons |
 | `tth <n>` | Llindar de pressió del tàctil (per defecte 400) |
 | `info` | Estat: heap, backlight, tàctil |

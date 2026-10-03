@@ -48,6 +48,15 @@ bool isActive();
 
 /* Fons sobre el qual es compondra la mascota (nom sense extensio). */
 void setBackground(const char* name);
+const char* backgroundName();
+
+/* Escala entera de l'sprite (1..3). Recalcula la mida i recentra X. */
+void setScale(uint8_t scale);
+uint8_t scale();
+
+/* Posicio (cantó superior-esquerre) i centrat horitzontal. */
+void setPosition(int16_t x, int16_t y);
+void centerX();
 
 /* Canvia d'animacio amb fallback (nom -> IDLE -> primera del manifest). */
 bool setAnimation(const char* name);

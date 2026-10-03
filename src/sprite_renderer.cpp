@@ -23,6 +23,11 @@ int8_t   gLoadedAnim  = -1;
 int8_t   gLoadedFrame = -1;
 uint32_t gFrameTimer  = 0;
 char     gBgName[24]  = {0};
+constexpr uint8_t kMinScale = 1;
+constexpr uint8_t kMaxScale = 3;
+
+uint8_t  gScale       = PET_SCALE;
+uint8_t  gMaxScale    = kMaxScale;   /* maxima escala que cap a la pantalla */
 
 bool ieq(const char* a, const char* b)
 {
@@ -67,16 +72,28 @@ bool begin()
 
     gStatus.spriteW = pet.width;
     gStatus.spriteH = pet.height;
-    gStatus.boxW = static_cast<uint16_t>(pet.width * 2);
-    gStatus.boxH = static_cast<uint16_t>(pet.height * 2);
-    gStatus.x = static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2);
+    /* Escala maxima que cap a la pantalla: evita desbordar la finestra i els
+     * buffers (p.ex. un sprite de 128 no pot anar a escala 3 en una pantalla de
+     * 320 d'ample). */
+    const uint8_t fitW = static_cast<uint8_t>(SCREEN_W / pet.width);
+    const uint8_t fitH = static_cast<uint8_t>(SCREEN_H / pet.height);
+    gMaxScale = (fitW < fitH) ? fitW : fitH;
+    if (gMaxScale < kMinScale) { gMaxScale = kMinScale; }
+    if (gMaxScale > kMaxScale) { gMaxScale = kMaxScale; }
+
+    gScale = (PET_SCALE < kMinScale) ? kMinScale
+                                     : ((PET_SCALE > gMaxScale) ? gMaxScale : PET_SCALE);
+    gStatus.boxW = static_cast<uint16_t>(pet.width * gScale);
+    gStatus.boxH = static_cast<uint16_t>(pet.height * gScale);
+    gStatus.x = static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X);
     gStatus.y = static_cast<int16_t>(PET_AREA_TOP);
     gStatus.fps = pet.fps ? pet.fps : 6;
     gStatus.frameCount = pet.anims[0].frames;
 
     const size_t spriteBytes = static_cast<size_t>(pet.width) * pet.height * 2u;
     const size_t bgBytes = static_cast<size_t>(SCREEN_W) * BG_BAND_LINES * 2u;
-    const size_t compBytes = static_cast<size_t>(gStatus.boxW) * BG_BAND_LINES * 2u;
+    /* Buffer de composicio dels valors maxes (escala maxima) per no reallocar. */
+    const size_t compBytes = static_cast<size_t>(pet.width) * gMaxScale * BG_BAND_LINES * 2u;
 
     gSpriteFrame = static_cast<uint8_t*>(heap_caps_malloc(spriteBytes, MALLOC_CAP_DMA));
     gBgBand = static_cast<uint8_t*>(heap_caps_malloc(bgBytes, MALLOC_CAP_DMA));
@@ -115,6 +132,40 @@ bool isActive()
 void setBackground(const char* name)
 {
     strlcpy(gBgName, name, sizeof(gBgName));
+}
+
+const char* backgroundName()
+{
+    return gBgName;
+}
+
+void setScale(uint8_t s)
+{
+    if (s < kMinScale) { s = kMinScale; }
+    if (s > gMaxScale) { s = gMaxScale; }
+    gScale = s;
+    if (!gStatus.active) { return; }
+    gStatus.boxW = static_cast<uint16_t>(gStatus.spriteW * s);
+    gStatus.boxH = static_cast<uint16_t>(gStatus.spriteH * s);
+    setPosition(static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X), gStatus.y);
+}
+
+uint8_t scale()
+{
+    return gScale;
+}
+
+void setPosition(int16_t x, int16_t y)
+{
+    const int16_t maxX = static_cast<int16_t>(SCREEN_W - gStatus.boxW);
+    const int16_t maxY = static_cast<int16_t>(SCREEN_H - gStatus.boxH);
+    gStatus.x = (x < 0) ? 0 : ((x > maxX) ? maxX : x);
+    gStatus.y = (y < 0) ? 0 : ((y > maxY) ? maxY : y);
+}
+
+void centerX()
+{
+    gStatus.x = static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X);
 }
 
 bool setAnimation(const char* name)
@@ -211,6 +262,7 @@ uint32_t drawFrame()
     const uint16_t bgW = SCREEN_W;
     const uint32_t bgRowBytes = static_cast<uint32_t>(bgW) * 2u;
     const uint16_t bx = static_cast<uint16_t>(gStatus.x);  /* offset x dins el fons */
+    const uint8_t  N = gScale;                             /* escala entera */
     /* Els .bin son big-endian: en memoria (little-endian) el pixel transparent
      * 0xF81F es llegeix com 0x1FF8. Per aixo comparem amb el valor byte-swapat. */
     const uint16_t transparent = pet.hasTransparent
@@ -247,7 +299,7 @@ uint32_t drawFrame()
         uint16_t* comp = reinterpret_cast<uint16_t*>(gComp);
         for (uint16_t r = 0; r < lines; ++r) {
             const uint16_t outRow = static_cast<uint16_t>(oy + r);
-            const uint16_t sRow = static_cast<uint16_t>(outRow >> 1);  /* 2x vei proxim */
+            const uint16_t sRow = static_cast<uint16_t>(outRow / N);  /* vei mes proxim */
             const uint16_t* sRowPtr = reinterpret_cast<const uint16_t*>(gSpriteFrame)
                                       + static_cast<size_t>(sRow) * SW;
             const uint16_t* bgRow = bgWords + static_cast<size_t>(r) * bgW + bx;
@@ -255,19 +307,14 @@ uint32_t drawFrame()
 
             memcpy(outRowPtr, bgRow, static_cast<size_t>(boxW) * 2u);
 
-            if (pet.hasTransparent) {
-                for (uint16_t sx = 0; sx < SW; ++sx) {
-                    const uint16_t sv = sRowPtr[sx];
-                    if (sv != transparent) {
-                        outRowPtr[2 * sx] = sv;
-                        outRowPtr[2 * sx + 1] = sv;
-                    }
+            for (uint16_t sx = 0; sx < SW; ++sx) {
+                const uint16_t sv = sRowPtr[sx];
+                if (pet.hasTransparent && sv == transparent) {
+                    continue;
                 }
-            } else {
-                for (uint16_t sx = 0; sx < SW; ++sx) {
-                    const uint16_t sv = sRowPtr[sx];
-                    outRowPtr[2 * sx] = sv;
-                    outRowPtr[2 * sx + 1] = sv;
+                uint16_t* dst = outRowPtr + static_cast<size_t>(sx) * N;
+                for (uint8_t k = 0; k < N; ++k) {
+                    dst[k] = sv;
                 }
             }
         }
