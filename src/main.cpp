@@ -1,9 +1,11 @@
 #include <Arduino.h>
+#include <time.h>
 
 #include "bg_renderer.h"
 #include "config.h"
 #include "display.h"
 #include "led.h"
+#include "net.h"
 #include "pet.h"
 #include "pins.h"
 #include "sd_assets.h"
@@ -62,6 +64,8 @@ uint32_t gPetOverlayTimer = 0;
 
 /* --- Estat de la UI / joc (Fase 4-5) -------------------------------------- */
 char     gHomeBg[24] = {0};
+bool     gAutoBg = true;         /* el fons segueix la meteo (Fase 6) */
+bool     gTimeApplied = false;   /* ja s'ha passat l'hora del NTP a la mascota */
 uint32_t gHeartUntil = 0;
 bool     gWasSleeping = false;
 int16_t  gHeartX = 0;
@@ -401,13 +405,23 @@ void applyHomeLayout()
 void homeHud()
 {
     Ui::Hud hud;
-    const uint32_t up = millis() / 1000;
-    hud.timeValid = true;   /* PLACEHOLDER: uptime; el NTP arribara a la Fase 6 */
-    hud.hour = static_cast<uint8_t>((up / 60) % 24);
-    hud.minute = static_cast<uint8_t>(up % 60);
-    hud.wifi = false;
-    hud.weatherValid = false;
-    hud.temperature = 0;
+    hud.timeValid = false;
+    hud.hour      = 0;
+    hud.minute    = 0;
+
+    if (Net::timeSynced()) {
+        struct tm now {};
+        if (getLocalTime(&now, 0)) {
+            hud.timeValid = true;
+            hud.hour      = static_cast<uint8_t>(now.tm_hour);
+            hud.minute    = static_cast<uint8_t>(now.tm_min);
+        }
+    }
+
+    const Net::Weather& w = Net::weather();
+    hud.wifi         = Net::connected();
+    hud.weatherValid = w.valid;
+    hud.temperature  = w.temperature;
     Ui::drawHud(hud);
 }
 
@@ -425,7 +439,8 @@ void startHome()
 
     Display::setBacklight(0);
     BgRenderer::drawFull(gHomeBg);
-    Display::setBacklight(100);
+    /* Respecta l'atenuacio de "dormint". */
+    Display::setBacklight(Pet::sleeping() ? 35 : 100);
 
     SpriteRenderer::setAnimation(Pet::animation());
     SpriteRenderer::drawFrame();
@@ -815,7 +830,8 @@ void printHelp()
                      "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
                      "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s> "
-                     "| theme [n] | homebg [nom]"));
+                     "| theme [n] | homebg [nom|auto] | wifi [ssid pass] | net | meteo "
+                     "| geo <lat> <lon>"));
 }
 
 void printInfo()
@@ -1022,13 +1038,59 @@ void handleCommand(char* cmd)
         }
     } else if (strcmp(cmd, "homebg") == 0) {
         if (arg == nullptr) {
-            Serial.printf("[UI] fons principal: %s\n", gHomeBg);
+            Serial.printf("[UI] fons principal: %s (%s)\n", gHomeBg,
+                          gAutoBg ? "automatic segons la meteo" : "fixat a ma");
+        } else if (strcmp(arg, "auto") == 0) {
+            gAutoBg = true;
+            Storage::saveHomeAuto(true);
+            Net::requestRefresh();
+            Serial.println(F("[UI] el fons seguira la meteo"));
         } else if (!backgroundExists(arg)) {
             Serial.printf("[UI] el fons '%s' no existeix a la SD\n", arg);
         } else {
+            gAutoBg = false;
+            Storage::saveHomeAuto(false);
             strlcpy(gHomeBg, arg, sizeof(gHomeBg));
             Storage::saveHomeBg(gHomeBg);
             startHome();
+        }
+    } else if (strcmp(cmd, "wifi") == 0) {
+        if (arg == nullptr) {
+            Net::printStatus();
+        } else if (strcmp(arg, "off") == 0) {
+            Net::clearCredentials();
+            Serial.println(F("[NET] credencials esborrades (wifi desactivat)"));
+        } else {
+            char* ssidArg = arg;
+            char* passArg = strchr(arg, ' ');
+            if (passArg != nullptr) {
+                *passArg++ = '\0';
+            }
+            if (Net::setCredentials(ssidArg, passArg != nullptr ? passArg : "")) {
+                Serial.printf("[NET] credencials desades per \"%s\"; reconnectant...\n", ssidArg);
+            } else {
+                Serial.println(F("[NET] us: wifi <ssid> <contrasenya> | wifi off"));
+            }
+        }
+    } else if (strcmp(cmd, "net") == 0) {
+        Net::printStatus();
+    } else if (strcmp(cmd, "meteo") == 0) {
+        Net::requestRefresh();
+        Serial.println(F("[NET] refrescant la meteo..."));
+    } else if (strcmp(cmd, "geo") == 0) {
+        if (arg == nullptr) {
+            Net::printStatus();
+        } else {
+            float lat = 0.0f;
+            float lon = 0.0f;
+            if (sscanf(arg, "%f %f", &lat, &lon) == 2) {
+                Net::setLocation(lat, lon);
+                Net::requestRefresh();
+                Serial.printf("[NET] ubicacio -> %.4f, %.4f\n", static_cast<double>(lat),
+                              static_cast<double>(lon));
+            } else {
+                Serial.println(F("[NET] us: geo <latitud> <longitud>"));
+            }
         }
     } else if (strcmp(cmd, "sets") == 0) {
         int a = 0;
@@ -1129,6 +1191,9 @@ void setup()
     if (home.bgValid) {
         strlcpy(gHomeBg, home.bg, sizeof(gHomeBg));
     }
+    if (home.autoValid) {
+        gAutoBg = home.autoBg;
+    }
 
     Serial.println(F("[SD] escanejant la targeta..."));
     if (SdAssets::begin()) {
@@ -1140,6 +1205,9 @@ void setup()
         gScreen = Screen::Static;
         gSdRetry = millis();
     }
+
+    /* Fase 6: WiFi + NTP + meteo, en una tasca propia (no bloqueja mai el bucle). */
+    Net::begin();
 
     updateLed();
     gHeapTimer = millis();
@@ -1164,6 +1232,13 @@ void loop()
 
     if (gScreen == Screen::Home) {
         Pet::update(millis());
+
+        /* L'hora del NTP arriba un cop: la passem a la mascota perque apliqui el
+         * decaiment del temps que ha estat apagada. */
+        if (Net::timeSynced() && !gTimeApplied) {
+            gTimeApplied = true;
+            Pet::setEpoch(Net::epoch());
+        }
 
         if (Pet::sleeping() != gWasSleeping) {
             gWasSleeping = Pet::sleeping();
@@ -1191,6 +1266,19 @@ void loop()
             homeHud();
             const Pet::Needs& n = Pet::needs();
             Ui::drawBars(n.food, n.happiness, n.energy, n.health);
+
+            /* Fons automatic segons la meteo (weather_NN). Nomes si l'usuari no
+             * ha fixat cap fons a ma amb 'homebg <nom>'. */
+            if (gAutoBg) {
+                const char* suggested = Net::backgroundName();
+                if (suggested[0] != '\0' && strcmp(suggested, gHomeBg) != 0 &&
+                    backgroundExists(suggested)) {
+                    Serial.printf("[UI] fons segons la meteo: %s -> %s\n", gHomeBg,
+                                  suggested);
+                    strlcpy(gHomeBg, suggested, sizeof(gHomeBg));
+                    startHome();
+                }
+            }
         }
 
         /* Tocs: els detectats pel bucle o els latchats mentre es dibuixava. */

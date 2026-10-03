@@ -77,6 +77,20 @@ static constexpr int PET_AREA_TOP = 104;
 static constexpr int PET_OFFSET_X = 0;
 /* Galeria d'animacions: temps entre animacio i animacio. */
 static constexpr uint32_t PET_ANIM_SWITCH_MS = 6000;
+/* --- Fase 6: xarxa, hora i meteo ----------------------------------------- */
+/* Zona horaria POSIX (Europa/Madrid, amb canvi d'hora automatic). */
+static constexpr const char* NET_TIMEZONE = "CET-1CEST,M3.5.0,M10.5.0/3";
+/* Ubicacio per defecte (Barcelona) si no se n'ha desat cap altra. */
+static constexpr float    NET_DEFAULT_LATITUDE  = 41.3874f;
+static constexpr float    NET_DEFAULT_LONGITUDE = 2.1686f;
+/* Cada quant es consulta la meteo i cada quant es reintenta si falla. */
+static constexpr uint32_t NET_WEATHER_PERIOD_MS = 30u * 60u * 1000u;
+static constexpr uint32_t NET_WEATHER_RETRY_MS  = 90u * 1000u;
+/* Temps maxim d'espera per connectar el WiFi (es fa dins la tasca de xarxa). */
+static constexpr uint32_t NET_WIFI_TIMEOUT_MS   = 20000u;
+/* Pila de la tasca de xarxa (el TLS necessita uns quants kB). */
+static constexpr uint32_t NET_TASK_STACK        = 8192u;
+
 /* Fons que es fa servir a la pantalla de prova de la mascota. */
 static constexpr const char* PET_TEST_BG = "spring";
 

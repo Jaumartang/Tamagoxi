@@ -62,7 +62,7 @@ void clearPetLayout()
 
 HomeCfg loadHomeCfg()
 {
-    HomeCfg cfg{false, {0}, false, 0};
+    HomeCfg cfg{false, {0}, false, 0, false, false};
 
     Preferences prefs;
     if (!prefs.begin(kNamespace, /*readOnly=*/true)) {
@@ -77,6 +77,11 @@ HomeCfg loadHomeCfg()
     if (t != 0xFF) {
         cfg.theme = t;
         cfg.themeValid = true;
+    }
+    const uint8_t a = prefs.getUChar("bgauto", 0xFF);
+    if (a != 0xFF) {
+        cfg.autoBg = (a != 0);
+        cfg.autoValid = true;
     }
     prefs.end();
     return cfg;
@@ -101,6 +106,17 @@ void saveUiTheme(uint8_t theme)
         return;
     }
     prefs.putUChar("uitheme", theme);
+    prefs.end();
+}
+
+void saveHomeAuto(bool autoBg)
+{
+    Preferences prefs;
+    if (!prefs.begin(kNamespace, /*readOnly=*/false)) {
+        Serial.println(F("[STORE] NVS no disponible"));
+        return;
+    }
+    prefs.putUChar("bgauto", autoBg ? 1 : 0);
     prefs.end();
 }
 

@@ -29,14 +29,17 @@ void clearPetLayout();
 
 /* Configuracio de la pantalla principal: fons preferit i tema de color. */
 struct HomeCfg {
-    bool    bgValid;
+    bool    bgValid;        /* hi ha un fons fixat a ma */
     char    bg[24];
     bool    themeValid;
     uint8_t theme;
+    bool    autoValid;      /* s'ha desat la preferencia de fons automatic */
+    bool    autoBg;         /* true = el fons segueix la meteo (weather_NN) */
 };
 
 HomeCfg loadHomeCfg();
 void saveHomeBg(const char* name);
+void saveHomeAuto(bool autoBg);
 void saveUiTheme(uint8_t theme);
 
 }  // namespace Storage

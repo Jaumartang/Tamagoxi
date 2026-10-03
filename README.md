@@ -5,7 +5,45 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 5** — el joc: necessitats que decauen, estats, accions i persistència.
+> Estat actual: **Fase 6** — xarxa: WiFi, hora del NTP i temperatura/meteo d'Open-Meteo.
+
+## Xarxa i meteo (Fase 6) — `src/net.*`
+
+Tot passa en una **tasca pròpia de FreeRTOS al nucli 0**: el bucle principal (que
+anima la mascota i atén el tàctil) **mai** es bloqueja per WiFi, NTP o HTTPS.
+
+- **WiFi**: credencials desades a la NVS amb `wifi <ssid> <contrasenya>`
+  (o a `include/secrets.h`, que no es puja mai al repositori). `wifi off`
+  les esborra. Reintents automàtics cada ~15 s.
+- **Hora (NTP)**: `pool.ntp.org` / `time.google.com` amb zona horària
+  `CET-1CEST,M3.5.0,M10.5.0/3` (Europa/Madrid, canvi d'hora automàtic). Quan
+  arriba la primera hora, el rellotge del HUD passa de `--:--` a l'hora real i
+  s'aplica el **decaïment fora de línia** a la mascota (`Pet::setEpoch`).
+- **Meteo (Open-Meteo)**: cada **30 min** es consulta
+  `temperature_2m`, `weather_code`, `wind_speed_10m` i `is_day` (sense clau
+  d'API). Ubicació per defecte **Barcelona**, canviable amb `geo <lat> <lon>`.
+- **Fons automàtic**: si no has fixat cap fons (`homebg <nom>`), el fons de la
+  pantalla principal **segueix el temps** amb els 16 fons `weather_NN`:
+
+  | Codi WMO / condició | Fons |
+  |---|---|
+  | 95-99 | `weather_10` tempesta |
+  | 45,48 | `weather_11` boira |
+  | 71-77, 85, 86 | `weather_05` neu |
+  | 56,57,66,67 | `weather_06` fred (pluja gelada) |
+  | 51-65, 80-82 | `weather_04` pluja |
+  | 3 | `weather_03` ennuvolat (dia) / `weather_01` (nit) |
+  | clar + ≤3 °C | `weather_06` fred |
+  | clar + ≥32 °C | `weather_07` calor |
+  | clar + vent ≥30 km/h | `weather_08` vent |
+  | clar + 5-8 h | `weather_12` sortida de sol |
+  | clar + 18-21 h | `weather_13` posta de sol |
+  | clar de dia | `weather_00` assolellat |
+  | clar de nit | `weather_02` estelada / `weather_01` nit |
+  | clar de nit + ≤2 °C | `weather_15` aurores |
+  | després de pluja + clar (dia) | `weather_09` arc de sant Martí |
+
+  Torna al mode manual amb `homebg <nom>` i al mode automàtic amb `homebg auto`.
 
 ## Joc (Fase 5) — `src/pet.*`
 
@@ -34,6 +72,7 @@ lògica del joc.
   `space`, `forest`, `autumn`, `desert`, `volcano`, `city_night`, `weather_00..15`).
   Es canvia amb `homebg <nom>` i es desa. **Els més "de nena"**: `spring`
   (prat amb cirerer florit), `dawn` (postal·lila) i `crystal_cave` (cristalls liles).
+  Amb **`homebg auto`** el fons torna a seguir la meteo (Fase 6).
 - La disposició de la mascota (`petscale`/`petpos`) també es desa.
 
 ## Tàctil (calibració)
@@ -171,7 +210,11 @@ En arrencar:
 | `home` | Torna a la pantalla principal (HUD + mascota + barres + botó MENU) |
 | `needs` | Mostra les necessitats, l'estat i l'animació actual de la mascota |
 | `theme [n]` | Llista o canvia el tema de color de la UI (es desa) |
-| `homebg [nom]` | Consulta o canvia el fons de la pantalla principal (es desa) |
+| `homebg [nom\|auto]` | Consulta o canvia el fons de la pantalla principal (es desa) |
+| `wifi [ssid pass]` | Guarda les credencials WiFi a la NVS (o mostra l'estat); `wifi off` les esborra |
+| `net` | Estat de la xarxa: WiFi, hora del NTP, ubicació i meteo |
+| `meteo` | Refresca la meteo ara mateix |
+| `geo [lat lon]` | Consulta o canvia la ubicació de la meteo (es desa) |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |
