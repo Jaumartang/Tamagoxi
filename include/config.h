@@ -85,20 +85,21 @@ static constexpr const char* PET_TEST_BG = "weather_00";
 static constexpr int UI_HUD_TOP = 0;
 static constexpr int UI_HUD_H   = 40;
 
-/* Panell de barres de necessitats (4 files compactes). */
-static constexpr int UI_BARS_TOP = 304;
-static constexpr int UI_BARS_BOT = 356;
+/* Zona inferior (part baixa de la pantalla): panell de barres a l'esquerra i
+ * boto MENU a la dreta. El menu desplegable tapa tota aquesta zona. */
+static constexpr int UI_BARS_TOP     = 300;
+static constexpr int UI_BARS_BOT     = 480;
+static constexpr int UI_BARS_PANEL_R = 224;   /* fi del panell de barres */
 
-/* Zona inferior: boto MENU (menu tancat) o panell desplegable (obert). */
-static constexpr int UI_MENU_BTN_TOP = 420;
-static constexpr int UI_MENU_BTN_BOT = 476;
-static constexpr int UI_MENU_BTN_L   = 60;
-static constexpr int UI_MENU_BTN_R   = 260;
+static constexpr int UI_MENU_BTN_L   = 224;   /* inici del boto MENU */
+static constexpr int UI_MENU_BTN_TOP = 300;
+static constexpr int UI_MENU_BTN_BOT = 480;
 
-/* Panell del menu desplegable (cobreix les barres i el boto MENU, no la mascota). */
-static constexpr int UI_MENU_TOP    = 304;
+/* Panell del menu desplegable (mateixa zona que barres + boto). */
+static constexpr int UI_MENU_TOP    = 300;
 static constexpr int UI_MENU_BOT    = 480;
-static constexpr int UI_MENU_HEADER = 32;
+static constexpr int UI_MENU_HEADER = 26;
+static constexpr int UI_MENU_STRIP  = 26;     /* barres compactes alternatives */
 
 /* Premuda llarga del rellotge del HUD per al menu d'ajustos (ms). */
 static constexpr uint32_t UI_LONGPRESS_MS = 2000;

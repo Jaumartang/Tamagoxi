@@ -25,8 +25,9 @@ constexpr uint16_t kPanelEdge = 0x4A49;   /* vora dels panells */
 constexpr uint16_t kBarTrack  = 0x39E7;   /* fons de les barres */
 constexpr uint16_t kAccent    = 0x2C7F;   /* blau del boto MENU / capcalera */
 
-constexpr int kBarsH    = (UI_BARS_BOT - UI_BARS_TOP) / 4;                     /* ~13 px */
-constexpr int kMenuRowH = (UI_MENU_BOT - (UI_MENU_TOP + UI_MENU_HEADER)) / 4;  /* 64 px */
+constexpr int kBarsH    = (UI_BARS_BOT - UI_BARS_TOP) / 4;                       /* 45 px */
+constexpr int kMenuRowH = (UI_MENU_BOT - UI_MENU_STRIP -
+                           (UI_MENU_TOP + UI_MENU_HEADER)) / 4;                  /* 32 px */
 
 constexpr int menuRowTop(int i) { return UI_MENU_TOP + UI_MENU_HEADER + i * kMenuRowH; }
 
@@ -94,26 +95,26 @@ void iconHeart(int cx, int cy, int s, uint16_t col)
     gfx().fillTriangle(cx - 2 * r, cy, cx + 2 * r, cy, cx, cy + (s / 2), col);
 }
 
-/* Una fila de barra: icona + barra rodona + valor numeric. */
+/* Una fila de barra (disseny gran): icona + barra rodona + valor numeric. */
 void drawBarRow(int row, int kind, uint16_t col, uint8_t value)
 {
-    const int y = UI_BARS_TOP + 2 + row * kBarsH;
+    const int y = UI_BARS_TOP + row * kBarsH;
     const int cy = y + kBarsH / 2;
-    const int is = kBarsH - 2;
+    const uint8_t v = (value > 100) ? 100 : value;
 
     switch (kind) {
-        case 0: iconApple(11, cy, is, col, kPanelBg); break;
-        case 1: iconSmiley(11, cy, is / 2 + 1, col); break;
-        case 2: iconBattery(11, cy, is, col, value); break;
-        default: iconHeart(11, cy, is + 2, col); break;
+        case 0: iconApple(28, cy, 32, col, kPanelBg); break;
+        case 1: iconSmiley(28, cy, 17, col); break;
+        case 2: iconBattery(28, cy, 32, col, v); break;
+        default: iconHeart(28, cy, 34, col); break;
     }
 
-    const int bx = 24;
-    const int bw = SCREEN_W - bx - 32;
-    const int bh = kBarsH - 5;
-    const int by = y + 2;
+    const int bx = 54;
+    const int bw = UI_BARS_PANEL_R - bx - 32;
+    const int bh = 18;
+    const int by = cy - bh / 2;
     gfx().fillRoundRect(bx, by, bw, bh, bh / 2, kBarTrack);
-    const int fillW = (bw * ((value > 100) ? 100 : value)) / 100;
+    const int fillW = (bw * v) / 100;
     if (fillW > bh) {
         gfx().fillRoundRect(bx, by, fillW, bh, bh / 2, col);
     } else if (fillW > 0) {
@@ -121,11 +122,11 @@ void drawBarRow(int row, int kind, uint16_t col, uint8_t value)
     }
 
     char buf[8];
-    snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>((value > 100) ? 100 : value));
+    snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(v));
     gfx().setTextDatum(MR_DATUM);
-    gfx().setTextFont(1);
+    gfx().setTextFont(2);
     gfx().setTextColor(col, kPanelBg);
-    gfx().drawString(buf, SCREEN_W - 5, cy);
+    gfx().drawString(buf, UI_BARS_PANEL_R - 6, cy);
 }
 
 /* --- Estat per no repintar el que no canvia ------------------------------- */
@@ -211,8 +212,8 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
         return;  /* cap valor ha canviat */
     }
 
-    gfx().fillRoundRect(2, UI_BARS_TOP, SCREEN_W - 4, UI_BARS_BOT - UI_BARS_TOP, 6, kPanelBg);
-    gfx().drawRoundRect(2, UI_BARS_TOP, SCREEN_W - 4, UI_BARS_BOT - UI_BARS_TOP, 6, kPanelEdge);
+    gfx().fillRect(0, UI_BARS_TOP, UI_BARS_PANEL_R, UI_BARS_BOT - UI_BARS_TOP, kPanelBg);
+    gfx().drawLine(0, UI_BARS_TOP, UI_BARS_PANEL_R - 1, UI_BARS_TOP, kPanelEdge);
     drawBarRow(0, 0, kColHunger, hunger);
     drawBarRow(1, 1, kColHappy, happiness);
     drawBarRow(2, 2, kColEnergy, energy);
@@ -230,27 +231,27 @@ constexpr uint16_t kRowCol[4] = {0xFC60, 0x2C7F, 0x7A1F, 0x07E0};  /* tarong., b
 
 void drawMenuRow(int i, uint16_t col, const char* label)
 {
-    const int x = 8;
-    const int w = SCREEN_W - 16;
+    const int x = 4;
+    const int w = SCREEN_W - 8;
     const int y = menuRowTop(i);
     const int h = kMenuRowH - 6;
     const int cy = y + 3 + h / 2;
 
     TFT_eSPI& t = gfx();
-    t.fillRoundRect(x, y + 3, w, h, 8, col);
+    t.fillRoundRect(x, y + 3, w, h, 7, col);
 
-    const int cx = x + 26;
+    const int cx = x + 24;
     switch (i) {
-        case 0: iconApple(cx, cy, 24, TFT_WHITE, col); break;
-        case 1: iconBall(cx, cy, 24, TFT_WHITE, col); break;
-        case 2: iconMoon(cx, cy, 24, TFT_WHITE, col); break;
-        default: iconCross(cx, cy, 24, TFT_WHITE); break;
+        case 0: iconApple(cx, cy, 20, TFT_WHITE, col); break;
+        case 1: iconBall(cx, cy, 20, TFT_WHITE, col); break;
+        case 2: iconMoon(cx, cy, 20, TFT_WHITE, col); break;
+        default: iconCross(cx, cy, 20, TFT_WHITE); break;
     }
 
     t.setTextDatum(ML_DATUM);
-    t.setTextFont(4);
+    t.setTextFont(2);
     t.setTextColor(TFT_WHITE, col);
-    t.drawString(label, x + 52, cy);
+    t.drawString(label, x + 46, cy);
 }
 
 }  // namespace
@@ -259,23 +260,24 @@ void drawMenuButton()
 {
     const int x = UI_MENU_BTN_L;
     const int y = UI_MENU_BTN_TOP;
-    const int w = UI_MENU_BTN_R - UI_MENU_BTN_L;
-    const int h = UI_MENU_BTN_BOT - UI_MENU_BTN_TOP;
+    const int w = SCREEN_W - x;
+    const int h = UI_MENU_BTN_BOT - y;
 
     TFT_eSPI& t = gfx();
-    t.fillRoundRect(x, y, w, h, 12, kAccent);
-    t.drawRoundRect(x, y, w, h, 12, TFT_WHITE);
+    t.fillRect(x, y, w, h, kAccent);
+    t.drawLine(x, y, x, y + h - 1, kPanelEdge);
+    t.drawLine(x, y, SCREEN_W - 1, y, kPanelEdge);
 
-    const int hx = x + 24;
-    const int hy = y + h / 2;
+    const int hxc = x + w / 2;
+    const int hy = y + 52;
     for (int i = -1; i <= 1; ++i) {
-        t.fillRect(hx, hy + i * 8 - 2, 22, 4, TFT_WHITE);
+        t.fillRect(hxc - 19, hy + i * 12 - 3, 38, 6, TFT_WHITE);
     }
 
-    t.setTextDatum(ML_DATUM);
+    t.setTextDatum(MC_DATUM);
     t.setTextFont(4);
     t.setTextColor(TFT_WHITE, kAccent);
-    t.drawString("MENU", x + 58, hy);
+    t.drawString("MENU", hxc, y + 124);
 }
 
 void drawMenu(bool sleeping)
@@ -283,24 +285,43 @@ void drawMenu(bool sleeping)
     TFT_eSPI& t = gfx();
 
     t.fillRect(0, UI_MENU_TOP, SCREEN_W, UI_MENU_BOT - UI_MENU_TOP, kPanelBg);
-    t.drawLine(0, UI_MENU_TOP, SCREEN_W - 1, UI_MENU_TOP, kPanelEdge);
 
     /* Capcalera amb el titol i la X de tancar. */
     t.fillRect(0, UI_MENU_TOP, SCREEN_W, UI_MENU_HEADER, kAccent);
     t.setTextDatum(ML_DATUM);
-    t.setTextFont(4);
+    t.setTextFont(2);
     t.setTextColor(TFT_WHITE, kAccent);
-    t.drawString("Que vols fer?", 10, UI_MENU_TOP + UI_MENU_HEADER / 2);
+    t.drawString("Que vols fer?", 8, UI_MENU_TOP + UI_MENU_HEADER / 2);
 
-    const int xx = SCREEN_W - 28;
+    const int xx = SCREEN_W - 22;
     const int xy = UI_MENU_TOP + UI_MENU_HEADER / 2;
-    t.drawLine(xx - 9, xy - 9, xx + 9, xy + 9, TFT_WHITE);
-    t.drawLine(xx - 9, xy + 9, xx + 9, xy - 9, TFT_WHITE);
+    t.drawLine(xx - 8, xy - 8, xx + 8, xy + 8, TFT_WHITE);
+    t.drawLine(xx - 8, xy + 8, xx + 8, xy - 8, TFT_WHITE);
 
     drawMenuRow(0, kRowCol[0], "Menjar");
     drawMenuRow(1, kRowCol[1], "Jugar");
     drawMenuRow(2, kRowCol[2], sleeping ? "Despertar" : "Dormir");
     drawMenuRow(3, kRowCol[3], "Curar");
+
+    /* Franja inferior: les 4 necessitats en versio compacta (alternativa). */
+    const int y0 = UI_MENU_BOT - UI_MENU_STRIP;
+    t.drawLine(0, y0, SCREEN_W - 1, y0, kPanelEdge);
+    const int cw = SCREEN_W / 4;
+    const uint16_t cols[4] = {kColHunger, kColHappy, kColEnergy, kColHealth};
+    for (int i = 0; i < 4; ++i) {
+        const int bx = i * cw + 5;
+        const int bw = cw - 10;
+        const int bh = 10;
+        const int by = y0 + (UI_MENU_STRIP - bh) / 2;
+        const uint8_t v = (gLastBars[i] > 100) ? 100 : gLastBars[i];
+        t.fillRoundRect(bx, by, bw, bh, bh / 2, kBarTrack);
+        const int fw = (bw * v) / 100;
+        if (fw > bh) {
+            t.fillRoundRect(bx, by, fw, bh, bh / 2, cols[i]);
+        } else if (fw > 0) {
+            t.fillRect(bx, by, fw, bh, cols[i]);
+        }
+    }
 }
 
 Zone hitTest(int16_t x, int16_t y, bool menuOpen)
@@ -339,8 +360,7 @@ Zone hitTest(int16_t x, int16_t y, bool menuOpen)
         return Zone::Pet;
     }
 
-    if (x >= UI_MENU_BTN_L && x < UI_MENU_BTN_R &&
-        y >= UI_MENU_BTN_TOP && y < UI_MENU_BTN_BOT) {
+    if (x >= UI_MENU_BTN_L && y >= UI_MENU_BTN_TOP) {
         return Zone::MenuButton;
     }
     return Zone::None;
