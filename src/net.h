@@ -52,6 +52,9 @@ Ap       scanAp(uint8_t index);
 void setEnabled(bool on);
 bool enabled();
 
+/* Sonda de memoria: quanta RAM es menja muntar el WiFi (no desa res). */
+void probeCost();
+
 /* Arrenca la tasca de xarxa. No bloqueja (torna de seguida). */
 void begin();
 

@@ -61,8 +61,10 @@ static constexpr uint32_t BL_DIAG_DIGITAL_MS = 900;
 static constexpr uint32_t BL_DIAG_PWM_MS     = 700;
 
 /* --- Renderitzat del fons (Fase 2) ---------------------------------------- */
-/* Files per franja en pintar un fons per streaming (320 x 24 x 2 B = 15.360 B). */
-static constexpr uint16_t BG_BAND_LINES = 24;
+/* Files per franja en pintar un fons per streaming. Amb 8 files son 320 x 8 x 2
+ * = 5.120 B (abans 24 -> 15.360 B): estalviem ~29 kB entre els buffers del fons
+ * i els de la mascota, que es el que permet tenir WiFi i Bluetooth alhora. */
+static constexpr uint16_t BG_BAND_LINES = 8;
 /* Patro de carrega: apagar la retroil-luminacio mentre es pinta el fons, per
  *que no es vegin les franges a mig pintar. */
 static constexpr bool BG_BACKLIGHT_OFF_ON_LOAD = true;

@@ -1,0 +1,16 @@
+# Prova de memoria 2: modem sleep del WiFi + musica amb Bluetooth
+cmd wifiprobe
+wait 8
+log
+cmd bt source
+wait 8
+log
+cmd music play 1
+wait 10
+log
+cmd music
+wait 1
+log
+cmd bt off
+wait 10
+log

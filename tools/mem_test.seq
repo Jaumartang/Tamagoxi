@@ -1,0 +1,19 @@
+# Prova de memoria: WiFi, Bluetooth i musica alhora
+cmd info
+wait 1
+log
+cmd wifiprobe
+wait 7
+log
+cmd bt source
+wait 8
+log
+cmd wifiprobe
+wait 7
+log
+cmd music play 1
+wait 8
+log
+cmd bt off
+wait 10
+log

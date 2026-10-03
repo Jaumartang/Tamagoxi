@@ -358,6 +358,12 @@ void netTask(void*)
         }
 
         if (WiFi.status() != WL_CONNECTED) {
+            /* Marge per muntar el WiFi (~45 kB). Amb el Bluetooth engegat la
+             * memoria va molt justa: val mes quedar-se sense xarxa que petar. */
+            if (gSsid[0] != '\0' && ESP.getFreeHeap() < 55000) {
+                vTaskDelay(3000 / portTICK_PERIOD_MS);
+                continue;
+            }
             if (!connectWifi()) {
                 gTimeSynced = false;
                 /* Dormim, pero la comanda 'wifi' pot despertar-nos a l'instant. */
@@ -565,6 +571,37 @@ void setEnabled(bool on)
 bool enabled()
 {
     return gEnabled;
+}
+
+/* Mesura quanta memoria es menja muntar el WiFi (no desa res a la NVS). Serveix
+ * per saber si WiFi i Bluetooth hi caben alhora. */
+void probeCost()
+{
+    const uint32_t before = ESP.getFreeHeap();
+    if (WiFi.getMode() == WIFI_OFF) {
+        WiFi.mode(WIFI_STA);
+    }
+    /* El "modem sleep" no nomes estalvia bateria: tambe deixa anar buffers. */
+    WiFi.setSleep(true);
+    WiFi.begin("__prova_memoria__", "__prova_memoria__");
+    uint32_t lowest = before;
+    for (int i = 0; i < 10; ++i) {
+        vTaskDelay(500 / portTICK_PERIOD_MS);
+        const uint32_t now = ESP.getFreeHeap();
+        if (now < lowest) {
+            lowest = now;
+        }
+    }
+    Serial.printf("[NET] sonda WiFi (modem sleep): %lu kB abans, %lu kB minim -> cost %lu kB (%lu kB ara)\n",
+                  static_cast<unsigned long>(before / 1024),
+                  static_cast<unsigned long>(lowest / 1024),
+                  static_cast<unsigned long>((before - lowest) / 1024),
+                  static_cast<unsigned long>(ESP.getFreeHeap() / 1024));
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    vTaskDelay(300 / portTICK_PERIOD_MS);
+    Serial.printf("[NET] sonda WiFi: aturat, heap %lu kB\n",
+                  static_cast<unsigned long>(ESP.getFreeHeap() / 1024));
 }
 
 void startScan()

@@ -1205,6 +1205,8 @@ void handleCommand(char* cmd)
         if (Audio::writeTestWav(name, static_cast<uint16_t>(secs))) {
             Audio::scan();
         }
+    } else if (strcmp(cmd, "wifiprobe") == 0) {
+        Net::probeCost();
     } else if (strcmp(cmd, "bt") == 0) {
         if (arg == nullptr || strcmp(arg, "status") == 0) {
             Audio::printStatus();
