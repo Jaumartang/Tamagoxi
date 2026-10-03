@@ -4,6 +4,7 @@
 #include "display.h"
 #include "led.h"
 #include "pins.h"
+#include "sd_assets.h"
 #include "touch.h"
 
 /*
@@ -42,6 +43,7 @@ int16_t  gCrossY = 0;
 bool     gHasCross   = false;
 bool     gBtnLatched = false;
 uint32_t gHeapTimer  = 0;
+uint32_t gSdRetry    = 0;
 
 char     gLine[CONSOLE_LINE_MAX];
 uint16_t gLineLen = 0;
@@ -240,11 +242,115 @@ void runLoadDemo()
     drawTouchScreen();
 }
 
+/* --- Pantalles de la targeta SD ------------------------------------------- */
+
+void drawSdError()
+{
+    TFT_eSPI& t = Display::driver();
+    t.fillScreen(TFT_RED);
+    t.setTextDatum(MC_DATUM);
+    t.setTextColor(TFT_WHITE, TFT_RED);
+    t.setTextFont(4);
+    t.drawString("Posa la", SCREEN_W / 2, SCREEN_H / 2 - 70);
+    t.drawString("targeta SD", SCREEN_W / 2, SCREEN_H / 2 - 30);
+    t.setTextFont(2);
+    t.drawString("Es reintenta cada 3 s...", SCREEN_W / 2, SCREEN_H / 2 + 30);
+    const char* err = SdAssets::report().firstError;
+    if (err[0] != '\0') {
+        t.drawString(err, SCREEN_W / 2, SCREEN_H / 2 + 60);
+    }
+}
+
+void drawSdScreen()
+{
+    const SdAssets::Report& r = SdAssets::report();
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    TFT_eSPI& t = Display::driver();
+
+    t.fillScreen(TFT_BLACK);
+    t.setTextFont(2);
+    t.setTextDatum(TL_DATUM);
+    t.setTextColor(TFT_WHITE, TFT_BLACK);
+    t.drawString("TARGETA SD", 6, 6);
+    t.setTextDatum(TR_DATUM);
+    t.setTextColor(r.mounted ? TFT_GREEN : TFT_RED, TFT_BLACK);
+    t.drawString(r.mounted ? "MUNTADA" : "NO TROBADA", SCREEN_W - 6, 6);
+
+    if (!r.mounted) {
+        drawSdError();
+        return;
+    }
+
+    char buf[48];
+    int y = 38;
+    t.setTextDatum(TL_DATUM);
+
+    t.setTextColor(TFT_YELLOW, TFT_BLACK);
+    snprintf(buf, sizeof(buf), "SD %llu MB  (usat %llu MB)",
+             static_cast<unsigned long long>(r.cardSizeMB),
+             static_cast<unsigned long long>(r.usedMB));
+    t.drawString(buf, 6, y);
+    y += 24;
+
+    if (r.bgsLoaded) {
+        t.setTextColor(TFT_WHITE, TFT_BLACK);
+        snprintf(buf, sizeof(buf), "Fons: %u  %ux%u", static_cast<unsigned>(r.bgCount),
+                 static_cast<unsigned>(bgs.width), static_cast<unsigned>(bgs.height));
+        t.drawString(buf, 6, y);
+        y += 20;
+        snprintf(buf, sizeof(buf), "  mides ok:%u  bad:%u",
+                 static_cast<unsigned>(r.bgFilesOk), static_cast<unsigned>(r.bgFilesBad));
+        t.setTextColor(r.bgFilesBad ? TFT_RED : TFT_DARKGREEN, TFT_BLACK);
+        t.drawString(buf, 6, y);
+        y += 20;
+    } else {
+        t.setTextColor(TFT_RED, TFT_BLACK);
+        t.drawString("Fons: ERROR", 6, y);
+        y += 20;
+    }
+
+    if (r.petsLoaded) {
+        t.setTextColor(TFT_WHITE, TFT_BLACK);
+        snprintf(buf, sizeof(buf), "Mascota: %s  %ux%u  fps %u",
+                 SdAssets::pet(0).folder,
+                 static_cast<unsigned>(r.petWidth), static_cast<unsigned>(r.petHeight),
+                 static_cast<unsigned>(r.petFps));
+        t.drawString(buf, 6, y);
+        y += 20;
+        snprintf(buf, sizeof(buf), "Anim: %u  (%u frames)", static_cast<unsigned>(r.animCount),
+                 static_cast<unsigned>(r.framesFirstAnim));
+        t.drawString(buf, 6, y);
+        y += 20;
+        snprintf(buf, sizeof(buf), "  frames ok:%u  bad:%u",
+                 static_cast<unsigned>(r.petFilesOk), static_cast<unsigned>(r.petFilesBad));
+        t.setTextColor(r.petFilesBad ? TFT_RED : TFT_DARKGREEN, TFT_BLACK);
+        t.drawString(buf, 6, y);
+        y += 20;
+    } else {
+        t.setTextColor(TFT_RED, TFT_BLACK);
+        t.drawString("Mascota: ERROR", 6, y);
+        y += 20;
+    }
+
+    y += 8;
+    if (r.firstError[0] != '\0') {
+        t.setTextColor(TFT_RED, TFT_BLACK);
+        t.drawString(r.firstError, 6, y);
+    } else {
+        t.setTextColor(TFT_GREEN, TFT_BLACK);
+        t.drawString("Tot correcte!", 6, y);
+    }
+    y += 24;
+    t.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    t.drawString("Arbre de fitxers pel port serie.", 6, y);
+    t.setTextColor(TFT_WHITE, TFT_BLACK);
+}
+
 /* --- Consola serie -------------------------------------------------------- */
 void printHelp()
 {
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
-                     "| cal | touch | colortest | tth <n>"));
+                     "| cal | touch | colortest | tth <n> | sd | lssd"));
 }
 
 void printInfo()
@@ -306,6 +412,19 @@ void handleCommand(char* cmd)
         drawTouchScreen();
     } else if (strcmp(cmd, "colortest") == 0) {
         drawColourBands();
+    } else if (strcmp(cmd, "sd") == 0) {
+        SdAssets::begin();
+        SdAssets::printTree(Serial, "/", 3);
+        if (SdAssets::isMounted()) {
+            drawSdScreen();
+        } else {
+            drawSdError();
+        }
+    } else if (strcmp(cmd, "lssd") == 0) {
+        if (!SdAssets::isMounted()) {
+            SdAssets::begin();
+        }
+        SdAssets::printTree(Serial, "/", 5);
     } else if (strcmp(cmd, "tth") == 0) {
         if (arg != nullptr) {
             Touch::setPressureThreshold(static_cast<uint16_t>(atoi(arg)));
@@ -389,7 +508,15 @@ void setup()
         runBacklightDiagnostic();
     }
 
-    drawTouchScreen();
+    Serial.println(F("[SD] escanejant la targeta..."));
+    if (SdAssets::begin()) {
+        SdAssets::printTree(Serial, "/", 3);
+        drawSdScreen();
+    } else {
+        drawSdError();
+        gSdRetry = millis();
+    }
+
     updateLed();
     gHeapTimer = millis();
     printInfo();
@@ -426,6 +553,16 @@ void loop()
 
     if (pressed) {
         updateInfo();
+    }
+
+    /* Reintent de muntatge de la SD si no n'hi ha (mai ens pengem). */
+    if (!SdAssets::isMounted() && (millis() - gSdRetry >= 3000)) {
+        gSdRetry = millis();
+        Serial.println(F("[SD] reintent de muntatge..."));
+        if (SdAssets::begin()) {
+            SdAssets::printTree(Serial, "/", 3);
+            drawSdScreen();
+        }
     }
 
     /* Informe periodic de memoria (detecta fuites d'heap). */

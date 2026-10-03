@@ -5,7 +5,7 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 0** — esquelet del projecte i verificació de maquinari.
+> Estat actual: **Fase 1** — SD muntada, manifests llegits i mides validades.
 
 ## Maquinari
 
@@ -49,6 +49,14 @@ Copia el contingut de `tamagochi_sd/` **a l'arrel** d'una targeta formatejada en
 - Sprite: `128×128` → **32.768 bytes** per frame (transparent = `0xF81F`).
 - Tots els `.bin` són **RGB565 big-endian, píxels crus, sense capçalera**.
 
+Recomanació: fes servir una targeta **neta** amb només `backgrounds/` i `pets/`
+(el firmware ignora la resta, però una targeta amb brossa macOS/Windows i fitxers
+grossos fa l'escaneig i l'arbre més lents). Validació des del PC abans de posar-la:
+
+```bash
+python3 tools/validate_sd.py /ruta/al/tamagochi_sd
+```
+
 ## Bring-up de maquinari (Fase 0+): tàctil, backlight i consola sèrie
 
 En arrencar:
@@ -72,6 +80,8 @@ En arrencar:
 | `cal` | Executa la calibració del tàctil |
 | `touch` | Redibuixa la pantalla de test tàctil |
 | `colortest` | Franges de colors (per verificar l'ordre RGB/BGR) |
+| `sd` | Remunta la SD, valida i mostra el resum a pantalla |
+| `lssd` | Escriu l'arbre de fitxers de la SD pel sèrie |
 | `tth <n>` | Llindar de pressió del tàctil (per defecte 400) |
 | `info` | Estat: heap, backlight, tàctil |
 
