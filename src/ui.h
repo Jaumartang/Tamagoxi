@@ -41,6 +41,12 @@ struct Hud {
 
 void begin();
 
+/* Tema de color de la UI (rosa/lila, nit violeta, rosa pastel...). */
+uint8_t theme();
+uint8_t themeCount();
+const char* themeName(uint8_t index);
+void setTheme(uint8_t index);
+
 /* HUD superior (només repinta si canvia respecte de l'ultim cop). */
 void drawHud(const Hud& hud);
 

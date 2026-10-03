@@ -25,6 +25,17 @@ lògica del joc.
 - **Decaïment fora de línia**: `Pet::setEpoch()` (que cridarà el NTP de la
   Fase 6) aplica el temps que ha estat apagat, amb un màxim de 3 dies.
 
+## Personalització
+
+- **Temes de color** (`theme`): `rosa-lila` (per defecte), `nit-violeta`,
+  `rosa-pastel`. Es canvia en calent amb `theme <n>` i es desa.
+- **Fons principal** (`homebg`): qualsevol nom del catàleg de la SD
+  (`spring`, `dawn`, `fireflies`, `crystal_cave`, `beach`, `underwater`,
+  `space`, `forest`, `autumn`, `desert`, `volcano`, `city_night`, `weather_00..15`).
+  Es canvia amb `homebg <nom>` i es desa. **Els més "de nena"**: `spring`
+  (prat amb cirerer florit), `dawn` (postal·lila) i `crystal_cave` (cristalls liles).
+- La disposició de la mascota (`petscale`/`petpos`) també es desa.
+
 ## Tàctil (calibració)
 
 El tàctil (XPT2046) fa servir un **mapa cru→píxels propi** (lineal, amb la Y
@@ -159,6 +170,8 @@ En arrencar:
 | `petreset` | Torna la mascota a la disposició per defecte de `config.h` |
 | `home` | Torna a la pantalla principal (HUD + mascota + barres + botó MENU) |
 | `needs` | Mostra les necessitats, l'estat i l'animació actual de la mascota |
+| `theme [n]` | Llista o canvia el tema de color de la UI (es desa) |
+| `homebg [nom]` | Consulta o canvia el fons de la pantalla principal (es desa) |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |

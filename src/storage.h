@@ -27,4 +27,16 @@ PetLayout loadPetLayout();
 void savePetLayout(int16_t x, int16_t y, uint8_t scale);
 void clearPetLayout();
 
+/* Configuracio de la pantalla principal: fons preferit i tema de color. */
+struct HomeCfg {
+    bool    bgValid;
+    char    bg[24];
+    bool    themeValid;
+    uint8_t theme;
+};
+
+HomeCfg loadHomeCfg();
+void saveHomeBg(const char* name);
+void saveUiTheme(uint8_t theme);
+
 }  // namespace Storage

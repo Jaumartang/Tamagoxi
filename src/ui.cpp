@@ -14,16 +14,40 @@ TFT_eSPI& gfx()
     return Display::driver();
 }
 
-/* Colors (RGB565). Paleta rosa / lila / violeta (pensada per a una nena). */
+/* Colors de les necessitats (RGB565), fixes perque tenen significat. */
 constexpr uint16_t kColHunger = 0xFD4B;   /* préssec */
 constexpr uint16_t kColHappy  = 0xFC77;   /* rosa */
 constexpr uint16_t kColEnergy = 0x8F15;   /* menta */
 constexpr uint16_t kColHealth = 0xEA30;   /* fúcsia */
 constexpr uint16_t kDim       = 0x7BEF;   /* gris clar */
-constexpr uint16_t kPanelBg   = 0x418B;   /* lila fosc (panells i HUD) */
-constexpr uint16_t kPanelEdge = 0xCD1B;   /* lila clar (vores) */
-constexpr uint16_t kBarTrack  = 0x6AB0;   /* lila mitjà (fons de les barres) */
-constexpr uint16_t kAccent    = 0xEA94;   /* rosa fort (boto MENU) */
+
+/* Temes de color de la UI (es poden canviar en calent amb la comanda 'theme'). */
+struct Theme {
+    uint16_t panelBg;      /* fons de panells i HUD */
+    uint16_t panelEdge;    /* vores i separadors */
+    uint16_t barTrack;     /* fons de les barres */
+    uint16_t accent;       /* boto MENU */
+    uint16_t close;        /* boto de tancar */
+    uint16_t row[4];       /* botons d'accio */
+};
+
+const Theme kThemes[] = {
+    /* rosa/lila (per defecte) */
+    {0x418B, 0xCD1B, 0x6AB0, 0xEA94, 0xC9ED, {0xF3CF, 0xE294, 0x8A36, 0xAB79}},
+    /* nit violeta */
+    {0x28E8, 0xAC1B, 0x520D, 0xCADB, 0xB98B, {0xE332, 0xDA99, 0x8A9C, 0xABDC}},
+    /* rosa pastel */
+    {0x7A8C, 0xFEFD, 0xAC12, 0xFBD5, 0xD28F, {0xFC72, 0xF376, 0xBB79, 0xDCBC}},
+};
+constexpr uint8_t kThemeCount = static_cast<uint8_t>(sizeof(kThemes) / sizeof(kThemes[0]));
+const char* const kThemeNames[kThemeCount] = {"rosa-lila", "nit-violeta", "rosa-pastel"};
+
+uint8_t gThemeIndex = 0;
+
+const Theme& th()
+{
+    return kThemes[gThemeIndex];
+}
 
 constexpr int kBarRowH = (UI_BARS_BOT - UI_BARS_TOP) / 4;                          /* 17 px */
 constexpr int kActionW = UI_BARS_PANEL_R / 4;                                      /* 64 px */
@@ -101,7 +125,7 @@ void drawBarRow(int row, int kind, uint16_t col, uint8_t value)
     const uint8_t v = (value > 100) ? 100 : value;
 
     switch (kind) {
-        case 0: iconApple(9, cy, 10, col, kPanelBg); break;
+        case 0: iconApple(9, cy, 10, col, th().panelBg); break;
         case 1: iconSmiley(9, cy, 5, col); break;
         case 2: iconBattery(9, cy, 10, col, v); break;
         default: iconHeart(9, cy, 11, col); break;
@@ -111,7 +135,7 @@ void drawBarRow(int row, int kind, uint16_t col, uint8_t value)
     const int bw = UI_BARS_PANEL_R - bx - 24;
     const int bh = 8;
     const int by = cy - bh / 2;
-    gfx().fillRoundRect(bx, by, bw, bh, bh / 2, kBarTrack);
+    gfx().fillRoundRect(bx, by, bw, bh, bh / 2, th().barTrack);
     const int fillW = (bw * v) / 100;
     if (fillW > bh) {
         gfx().fillRoundRect(bx, by, fillW, bh, bh / 2, col);
@@ -123,7 +147,7 @@ void drawBarRow(int row, int kind, uint16_t col, uint8_t value)
     snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(v));
     gfx().setTextDatum(MR_DATUM);
     gfx().setTextFont(1);
-    gfx().setTextColor(col, kPanelBg);
+    gfx().setTextColor(col, th().panelBg);
     gfx().drawString(buf, UI_BARS_PANEL_R - 2, cy);
 }
 
@@ -142,6 +166,33 @@ void begin()
     /* Res a inicialitzar; l'estat el porta aquest modul. */
 }
 
+uint8_t themeCount()
+{
+    return kThemeCount;
+}
+
+const char* themeName(uint8_t index)
+{
+    if (index >= kThemeCount) {
+        return "?";
+    }
+    return kThemeNames[index];
+}
+
+uint8_t theme()
+{
+    return gThemeIndex;
+}
+
+void setTheme(uint8_t index)
+{
+    if (index >= kThemeCount) {
+        return;
+    }
+    gThemeIndex = index;
+    invalidate();
+}
+
 void drawHud(const Hud& hud)
 {
     if (gHudDrawn && gLastHud.timeValid == hud.timeValid && gLastHud.hour == hud.hour &&
@@ -154,14 +205,14 @@ void drawHud(const Hud& hud)
     gHudDrawn = true;
 
     TFT_eSPI& t = gfx();
-    t.fillRect(0, UI_HUD_TOP, SCREEN_W, UI_HUD_H, kPanelBg);
-    t.drawLine(0, UI_HUD_H - 1, SCREEN_W - 1, UI_HUD_H - 1, kPanelEdge);
+    t.fillRect(0, UI_HUD_TOP, SCREEN_W, UI_HUD_H, th().panelBg);
+    t.drawLine(0, UI_HUD_H - 1, SCREEN_W - 1, UI_HUD_H - 1, th().panelEdge);
 
     /* Hora (esquerra). */
     char buf[16];
     t.setTextDatum(ML_DATUM);
     t.setTextFont(4);
-    t.setTextColor(TFT_WHITE, kPanelBg);
+    t.setTextColor(TFT_WHITE, th().panelBg);
     if (hud.timeValid) {
         snprintf(buf, sizeof(buf), "%02u:%02u", static_cast<unsigned>(hud.hour),
                  static_cast<unsigned>(hud.minute));
@@ -177,13 +228,13 @@ void drawHud(const Hud& hud)
         t.fillCircle(tx - 18, UI_HUD_TOP + UI_HUD_H / 2, 8, 0xFFE0);
         t.setTextDatum(ML_DATUM);
         t.setTextFont(4);
-        t.setTextColor(TFT_WHITE, kPanelBg);
+        t.setTextColor(TFT_WHITE, th().panelBg);
         t.drawString(buf, tx, UI_HUD_TOP + UI_HUD_H / 2);
         t.drawCircle(tx + t.textWidth(buf) + 5, UI_HUD_TOP + UI_HUD_H / 2 - 8, 4, TFT_WHITE);
     } else {
         t.setTextDatum(MR_DATUM);
         t.setTextFont(2);
-        t.setTextColor(kDim, kPanelBg);
+        t.setTextColor(kDim, th().panelBg);
         t.drawString("--", SCREEN_W / 2, UI_HUD_TOP + UI_HUD_H / 2);
     }
 
@@ -211,8 +262,8 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
         return;  /* cap valor ha canviat */
     }
 
-    gfx().fillRect(0, UI_BARS_TOP, UI_BARS_PANEL_R, UI_BARS_BOT - UI_BARS_TOP, kPanelBg);
-    gfx().drawLine(0, UI_BARS_TOP, UI_BARS_PANEL_R - 1, UI_BARS_TOP, kPanelEdge);
+    gfx().fillRect(0, UI_BARS_TOP, UI_BARS_PANEL_R, UI_BARS_BOT - UI_BARS_TOP, th().panelBg);
+    gfx().drawLine(0, UI_BARS_TOP, UI_BARS_PANEL_R - 1, UI_BARS_TOP, th().panelEdge);
     drawBarRow(0, 0, kColHunger, hunger);
     drawBarRow(1, 1, kColHappy, happiness);
     drawBarRow(2, 2, kColEnergy, energy);
@@ -226,8 +277,6 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
 
 namespace {
 
-constexpr uint16_t kRowCol[4] = {0xF3CF, 0xE294, 0x8A36, 0xAB79};  /* coral, rosa, violeta, lila */
-
 void drawActionButton(int i, uint16_t col, const char* label)
 {
     const int x = i * kActionW;
@@ -237,7 +286,7 @@ void drawActionButton(int i, uint16_t col, const char* label)
 
     TFT_eSPI& t = gfx();
     t.fillRect(x, y, w, h, col);
-    t.drawLine(x, y, x, y + h - 1, kPanelEdge);
+    t.drawLine(x, y, x, y + h - 1, th().panelEdge);
 
     const int cx = x + w / 2;
     const int iy = y + 12;
@@ -258,7 +307,7 @@ void drawCompactBars()
 {
     TFT_eSPI& t = gfx();
     const int y0 = UI_BARS_BOT - UI_MENU_STRIP;
-    t.drawLine(0, y0, SCREEN_W - 1, y0, kPanelEdge);
+    t.drawLine(0, y0, SCREEN_W - 1, y0, th().panelEdge);
 
     const int cw = SCREEN_W / 4;
     const uint16_t cols[4] = {kColHunger, kColHappy, kColEnergy, kColHealth};
@@ -268,7 +317,7 @@ void drawCompactBars()
         const int bh = 5;
         const int by = y0 + (UI_MENU_STRIP - bh) / 2;
         const uint8_t v = (gLastBars[i] > 100) ? 100 : gLastBars[i];
-        t.fillRoundRect(bx, by, bw, bh, 2, kBarTrack);
+        t.fillRoundRect(bx, by, bw, bh, 2, th().barTrack);
         const int fw = (bw * v) / 100;
         if (fw > 2) {
             t.fillRoundRect(bx, by, fw, bh, 2, cols[i]);
@@ -288,9 +337,9 @@ void drawMenuButton()
     const int h = UI_MENU_BTN_BOT - y;
 
     TFT_eSPI& t = gfx();
-    t.fillRect(x, y, w, h, kAccent);
-    t.drawLine(x, y, x, y + h - 1, kPanelEdge);
-    t.drawLine(x, y, SCREEN_W - 1, y, kPanelEdge);
+    t.fillRect(x, y, w, h, th().accent);
+    t.drawLine(x, y, x, y + h - 1, th().panelEdge);
+    t.drawLine(x, y, SCREEN_W - 1, y, th().panelEdge);
 
     const int hxc = x + w / 2;
     const int hy = y + 13;
@@ -300,7 +349,7 @@ void drawMenuButton()
 
     t.setTextDatum(MC_DATUM);
     t.setTextFont(1);
-    t.setTextColor(TFT_WHITE, kAccent);
+    t.setTextColor(TFT_WHITE, th().accent);
     t.drawString("MENU", hxc, y + 34);
 }
 
@@ -308,22 +357,22 @@ void drawMenu(bool sleeping)
 {
     TFT_eSPI& t = gfx();
 
-    t.fillRect(0, UI_BARS_TOP, SCREEN_W, UI_BARS_BOT - UI_BARS_TOP, kPanelBg);
+    t.fillRect(0, UI_BARS_TOP, SCREEN_W, UI_BARS_BOT - UI_BARS_TOP, th().panelBg);
 
-    drawActionButton(0, kRowCol[0], "Menjar");
-    drawActionButton(1, kRowCol[1], "Jugar");
-    drawActionButton(2, kRowCol[2], sleeping ? "Desperta" : "Dormir");
-    drawActionButton(3, kRowCol[3], "Curar");
+    drawActionButton(0, th().row[0], "Menjar");
+    drawActionButton(1, th().row[1], "Jugar");
+    drawActionButton(2, th().row[2], sleeping ? "Desperta" : "Dormir");
+    drawActionButton(3, th().row[3], "Curar");
 
     /* Boto de tancar (dreta) amb una X. */
     const int bx = UI_MENU_BTN_L;
     const int by = UI_MENU_BTN_TOP;
     const int bw = SCREEN_W - bx;
     const int bh = UI_MENU_BTN_BOT - by;
-    const uint16_t closeCol = 0xC9ED;   /* fúcsia fosc */
+    const uint16_t closeCol = th().close;
     t.fillRect(bx, by, bw, bh, closeCol);
-    t.drawLine(bx, by, bx, by + bh - 1, kPanelEdge);
-    t.drawLine(bx, by, SCREEN_W - 1, by, kPanelEdge);
+    t.drawLine(bx, by, bx, by + bh - 1, th().panelEdge);
+    t.drawLine(bx, by, SCREEN_W - 1, by, th().panelEdge);
     const int cx = bx + bw / 2;
     const int cy = by + bh / 2 - 4;
     t.drawLine(cx - 8, cy - 8, cx + 8, cy + 8, TFT_WHITE);

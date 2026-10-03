@@ -60,4 +60,48 @@ void clearPetLayout()
     prefs.end();
 }
 
+HomeCfg loadHomeCfg()
+{
+    HomeCfg cfg{false, {0}, false, 0};
+
+    Preferences prefs;
+    if (!prefs.begin(kNamespace, /*readOnly=*/true)) {
+        return cfg;
+    }
+    const String bg = prefs.getString("hbg", "");
+    if (bg.length() > 0 && bg.length() < sizeof(cfg.bg)) {
+        strlcpy(cfg.bg, bg.c_str(), sizeof(cfg.bg));
+        cfg.bgValid = true;
+    }
+    const uint8_t t = prefs.getUChar("uitheme", 0xFF);
+    if (t != 0xFF) {
+        cfg.theme = t;
+        cfg.themeValid = true;
+    }
+    prefs.end();
+    return cfg;
+}
+
+void saveHomeBg(const char* name)
+{
+    Preferences prefs;
+    if (!prefs.begin(kNamespace, /*readOnly=*/false)) {
+        Serial.println(F("[STORE] NVS no disponible"));
+        return;
+    }
+    prefs.putString("hbg", name);
+    prefs.end();
+}
+
+void saveUiTheme(uint8_t theme)
+{
+    Preferences prefs;
+    if (!prefs.begin(kNamespace, /*readOnly=*/false)) {
+        Serial.println(F("[STORE] NVS no disponible"));
+        return;
+    }
+    prefs.putUChar("uitheme", theme);
+    prefs.end();
+}
+
 }  // namespace Storage

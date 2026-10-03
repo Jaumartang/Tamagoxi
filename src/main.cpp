@@ -516,6 +516,32 @@ void closeMenu()
     Serial.println(F("[UI] menu tancat"));
 }
 
+/* Repinta la UI de la pantalla principal (sense tocar el fons ni la mascota). */
+void redrawHomeUi()
+{
+    Ui::invalidate();
+    homeHud();
+    const Pet::Needs& n = Pet::needs();
+    Ui::drawBars(n.food, n.happiness, n.energy, n.health);
+    if (gMenuOpen) {
+        Ui::drawMenu(Pet::sleeping());
+    } else {
+        Ui::drawMenuButton();
+    }
+}
+
+/* Comprova que el fons existeix al cataleg de la SD. */
+bool backgroundExists(const char* name)
+{
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    for (uint8_t i = 0; i < bgs.count; ++i) {
+        if (strcmp(bgs.names[i], name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void handleHomeTap(int16_t tx, int16_t ty)
 {
     const Ui::Zone z = Ui::hitTest(tx, ty, gMenuOpen);
@@ -788,7 +814,8 @@ void printHelp()
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
                      "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
-                     "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s>"));
+                     "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s> "
+                     "| theme [n] | homebg [nom]"));
 }
 
 void printInfo()
@@ -976,6 +1003,33 @@ void handleCommand(char* cmd)
         cmdShot(arg);
     } else if (strcmp(cmd, "baud") == 0) {
         cmdBaud(arg);
+    } else if (strcmp(cmd, "theme") == 0) {
+        if (arg == nullptr) {
+            for (uint8_t i = 0; i < Ui::themeCount(); ++i) {
+                Serial.printf("[UI] tema %u: %-14s%s\n", static_cast<unsigned>(i),
+                              Ui::themeName(i), (i == Ui::theme()) ? " <- actual" : "");
+            }
+        } else {
+            const int idx = atoi(arg);
+            if (idx < 0 || idx >= static_cast<int>(Ui::themeCount())) {
+                Serial.println(F("[UI] tema invalid"));
+            } else {
+                Ui::setTheme(static_cast<uint8_t>(idx));
+                Storage::saveUiTheme(static_cast<uint8_t>(idx));
+                redrawHomeUi();
+                Serial.printf("[UI] tema -> %s\n", Ui::themeName(static_cast<uint8_t>(idx)));
+            }
+        }
+    } else if (strcmp(cmd, "homebg") == 0) {
+        if (arg == nullptr) {
+            Serial.printf("[UI] fons principal: %s\n", gHomeBg);
+        } else if (!backgroundExists(arg)) {
+            Serial.printf("[UI] el fons '%s' no existeix a la SD\n", arg);
+        } else {
+            strlcpy(gHomeBg, arg, sizeof(gHomeBg));
+            Storage::saveHomeBg(gHomeBg);
+            startHome();
+        }
     } else if (strcmp(cmd, "sets") == 0) {
         int a = 0;
         int b = 0;
@@ -1067,6 +1121,14 @@ void setup()
     }
 
     Pet::begin();
+
+    const Storage::HomeCfg home = Storage::loadHomeCfg();
+    if (home.themeValid) {
+        Ui::setTheme(home.theme);
+    }
+    if (home.bgValid) {
+        strlcpy(gHomeBg, home.bg, sizeof(gHomeBg));
+    }
 
     Serial.println(F("[SD] escanejant la targeta..."));
     if (SdAssets::begin()) {
