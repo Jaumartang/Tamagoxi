@@ -211,7 +211,11 @@ uint32_t drawFrame()
     const uint16_t bgW = SCREEN_W;
     const uint32_t bgRowBytes = static_cast<uint32_t>(bgW) * 2u;
     const uint16_t bx = static_cast<uint16_t>(gStatus.x);  /* offset x dins el fons */
-    const uint16_t transparent = pet.hasTransparent ? pet.transparent : 0u;
+    /* Els .bin son big-endian: en memoria (little-endian) el pixel transparent
+     * 0xF81F es llegeix com 0x1FF8. Per aixo comparem amb el valor byte-swapat. */
+    const uint16_t transparent = pet.hasTransparent
+        ? static_cast<uint16_t>((pet.transparent >> 8) | (pet.transparent << 8))
+        : 0u;
 
     TFT_eSPI& t = Display::driver();
     const uint32_t t0 = millis();
