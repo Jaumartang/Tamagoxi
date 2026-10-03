@@ -266,6 +266,8 @@ void showWifi();
 void showMusic();
 void showBluetooth();
 void drawBluetooth();
+void saveBtSnapshot();
+bool btChanged();
 void drawMusic();
 void showSettings();
 void showAbout();
@@ -893,6 +895,58 @@ void drawBluetooth()
     drawButton(8, kBtBtnY2, 148, kBtBtnH, on ? "Apagar" : "So a la placa",
                on ? Ui::colorClose() : Ui::colorRow(3));
     drawButton(164, kBtBtnY2, 148, kBtBtnH, "Tanca", Ui::colorClose());
+
+    saveBtSnapshot();       /* per no repintar-ho si no canvia res */
+}
+
+/* Estat de la darrera pintada: si no canvia res, no cal repintar (abans el
+ * panell es repintava cada 2 s i es veia parpellejar). */
+struct BtSnapshot {
+    uint8_t mode;
+    bool    connected;
+    bool    scanning;
+    uint8_t count;
+    char    names[Audio::kBtMaxDevices][Audio::kBtNameMax];
+    int8_t  rssi[Audio::kBtMaxDevices];
+};
+
+BtSnapshot gBtSnap = {};
+
+void saveBtSnapshot()
+{
+    gBtSnap.mode      = static_cast<uint8_t>(Audio::btMode());
+    gBtSnap.connected = Audio::btConnected();
+    gBtSnap.scanning  = Audio::btScanning();
+    gBtSnap.count     = Audio::btDeviceCount();
+    for (uint8_t i = 0; i < gBtSnap.count && i < Audio::kBtMaxDevices; ++i) {
+        const Audio::BtDevice* d = Audio::btDevice(i);
+        if (d == nullptr) {
+            continue;
+        }
+        strlcpy(gBtSnap.names[i], d->name, Audio::kBtNameMax);
+        gBtSnap.rssi[i] = d->rssi;
+    }
+}
+
+bool btChanged()
+{
+    if (gBtSnap.mode != static_cast<uint8_t>(Audio::btMode())
+        || gBtSnap.connected != Audio::btConnected()
+        || gBtSnap.scanning != Audio::btScanning()
+        || gBtSnap.count != Audio::btDeviceCount()) {
+        return true;
+    }
+    for (uint8_t i = 0; i < gBtSnap.count && i < Audio::kBtMaxDevices; ++i) {
+        const Audio::BtDevice* d = Audio::btDevice(i);
+        if (d == nullptr) {
+            return true;
+        }
+        if (gBtSnap.rssi[i] != d->rssi
+            || strncmp(gBtSnap.names[i], d->name, Audio::kBtNameMax) != 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void drawGames()
@@ -1326,11 +1380,13 @@ void topMenuRect(int16_t& x, int16_t& y, int16_t& w, int16_t& h)
 void update(uint32_t nowMs)
 {
     if (gId == Id::Bluetooth) {
-        /* Refresca l'estat (i la llista, mentre cerca) de tant en tant. */
+        /* Refresca NOMES si ha canviat alguna cosa (si no, parpellejava). */
         const uint32_t period = Audio::btScanning() ? 600u : 2000u;
         if (nowMs - gTimer >= period) {
             gTimer = nowMs;
-            drawBluetooth();
+            if (btChanged()) {
+                drawBluetooth();
+            }
         }
         return;
     }

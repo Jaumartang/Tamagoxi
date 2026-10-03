@@ -433,20 +433,36 @@ void startHome()
     if (gHomeBg[0] == '\0') {
         strlcpy(gHomeBg, PET_TEST_BG, sizeof(gHomeBg));
     }
-    if (!SpriteRenderer::begin()) {
-        return;
-    }
 
-    applyHomeLayout();
-    SpriteRenderer::setBackground(gHomeBg);
+    /* Amb el Bluetooth ences la mascota esta suspesa (no hi ha memoria per als
+     * seus buffers): pintem igualment el fons i la UI, pero sense mascota. */
+    const bool petOk = !SpriteRenderer::suspended() && SpriteRenderer::begin();
+    if (petOk) {
+        applyHomeLayout();
+        SpriteRenderer::setBackground(gHomeBg);
+    }
 
     Display::setBacklight(0);
     BgRenderer::drawFull(gHomeBg);
     /* Respecta l'atenuacio de "dormint". */
     Display::setBacklight(Pet::sleeping() ? 35 : 100);
 
-    SpriteRenderer::setAnimation(Pet::animation());
-    SpriteRenderer::drawFrame();
+    if (petOk) {
+        SpriteRenderer::setAnimation(Pet::animation());
+        SpriteRenderer::drawFrame();
+    } else {
+        /* El Bluetooth te la memoria que necessita la mascota: ho diem clar. */
+        TFT_eSPI& t = Display::driver();
+        t.fillRoundRect(48, 186, 224, 68, 14, Ui::colorPanelBg());
+        t.drawRoundRect(48, 186, 224, 68, 14, Ui::colorAccent());
+        t.setTextDatum(MC_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(Ui::colorAccent(), Ui::colorPanelBg());
+        t.drawString("Bluetooth ences", SCREEN_W / 2, 204);
+        t.setTextFont(1);
+        t.setTextColor(TFT_WHITE, Ui::colorPanelBg());
+        t.drawString("la mascota dorm mentre dura", SCREEN_W / 2, 230);
+    }
     gWasSleeping = Pet::sleeping();
 
     gMenuOpen = false;
