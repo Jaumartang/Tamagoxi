@@ -79,3 +79,20 @@ static constexpr int PET_OFFSET_X = 0;
 static constexpr uint32_t PET_ANIM_SWITCH_MS = 6000;
 /* Fons que es fa servir a la pantalla de prova de la mascota. */
 static constexpr const char* PET_TEST_BG = "weather_00";
+
+/* --- UI (Fase 4) ---------------------------------------------------------- */
+/* Franja del HUD superior (hora, temps, WiFi). */
+static constexpr int UI_HUD_TOP = 0;
+static constexpr int UI_HUD_H   = 40;
+/* Barres de necessitats (4 files). */
+static constexpr int UI_BARS_TOP = 336;
+static constexpr int UI_BARS_BOT = 400;
+/* Botons grans (4, repartits en l'amplada). */
+static constexpr int UI_BUTTONS_TOP = 400;
+static constexpr int UI_BUTTONS_BOT = 480;
+/* Premuda llarga del rellotge del HUD per al menu d'ajustos (ms). */
+static constexpr uint32_t UI_LONGPRESS_MS = 2000;
+/* Cooldown minim entre carícies (anti-spam). */
+static constexpr uint32_t UI_PET_COOLDOWN_MS = 1200;
+/* Durada del cor de caricia a pantalla (ms). */
+static constexpr uint32_t UI_HEART_MS = 1200;

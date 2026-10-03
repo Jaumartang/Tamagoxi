@@ -9,6 +9,7 @@
 #include "sprite_renderer.h"
 #include "storage.h"
 #include "touch.h"
+#include "ui.h"
 
 /*
  * main.cpp - Tamagoxi v2 (Tamagotchi gegant per a la Noa)
@@ -50,13 +51,32 @@ uint32_t gSdRetry    = 0;
 
 /* Pantalla activa: galeria de fons / test tactil / estatica (dibuixada per una
  * comanda). El bucle nomes fa el que toca a cada mode. */
-enum class Screen : uint8_t { Gallery, TouchTest, PetTest, Static };
+enum class Screen : uint8_t { Home, Gallery, TouchTest, PetTest, Static };
 Screen   gScreen = Screen::Static;
 uint8_t  gBgIndex = 0;
 uint32_t gBgTimer = 0;
 bool     gTouchWasPressed = false;
 uint32_t gPetAnimTimer = 0;
 uint32_t gPetOverlayTimer = 0;
+
+/* --- Provisio de la UI (Fase 4; la Fase 5 ho substitueix pel joc) --------- */
+uint8_t  gHunger = 70;
+uint8_t  gHappiness = 70;
+uint8_t  gEnergy = 70;
+uint8_t  gHealth = 90;
+char     gHomeBg[24] = {0};
+enum class PetBase : uint8_t { Idle, Sleep };
+PetBase  gPetBase = PetBase::Idle;
+char     gTempAnim[20] = {0};
+uint32_t gTempAnimUntil = 0;
+uint32_t gHeartUntil = 0;
+int16_t  gHeartX = 0;
+int16_t  gHeartY = 0;
+uint32_t gPetCooldown = 0;
+uint32_t gPressStart = 0;
+bool     gLongPressDone = false;
+Ui::Zone gBtnFlash = Ui::Zone::None;
+uint32_t gBtnFlashUntil = 0;
 
 char     gLine[CONSOLE_LINE_MAX];
 uint16_t gLineLen = 0;
@@ -361,6 +381,162 @@ void redrawPetTest()
     drawPetOverlay();
 }
 
+/* --- Pantalla principal amb UI (Fase 4) ----------------------------------- */
+
+/* Suma 'd' a un valor 0..100 mantenint-lo dins el rang. */
+uint8_t clampAdd(uint8_t value, int delta)
+{
+    int v = static_cast<int>(value) + delta;
+    if (v < 0) {
+        v = 0;
+    }
+    if (v > 100) {
+        v = 100;
+    }
+    return static_cast<uint8_t>(v);
+}
+
+/* Manté la mascota entre el HUD i les barres. */
+void applyHomeLayout()
+{
+    if (!SpriteRenderer::isActive()) {
+        return;
+    }
+    const int16_t boxH = static_cast<int16_t>(SpriteRenderer::status().boxH);
+    int16_t y = SpriteRenderer::status().y;
+    const int16_t maxY = static_cast<int16_t>(UI_BARS_TOP - boxH);
+    if (y > maxY) {
+        y = maxY;
+    }
+    if (y < 0) {
+        y = 0;
+    }
+    SpriteRenderer::setPosition(SpriteRenderer::status().x, y);
+}
+
+void homeHud()
+{
+    Ui::Hud hud;
+    const uint32_t up = millis() / 1000;
+    hud.timeValid = true;   /* PLACEHOLDER: uptime; el NTP arribara a la Fase 6 */
+    hud.hour = static_cast<uint8_t>((up / 60) % 24);
+    hud.minute = static_cast<uint8_t>(up % 60);
+    hud.wifi = false;
+    hud.weatherValid = false;
+    hud.temperature = 0;
+    Ui::drawHud(hud);
+}
+
+void startHome()
+{
+    if (gHomeBg[0] == '\0') {
+        strlcpy(gHomeBg, PET_TEST_BG, sizeof(gHomeBg));
+    }
+    if (!SpriteRenderer::begin()) {
+        return;
+    }
+
+    gPetBase = PetBase::Idle;
+    gTempAnimUntil = 0;
+    gTempAnim[0] = '\0';
+
+    applyHomeLayout();
+    SpriteRenderer::setBackground(gHomeBg);
+
+    Display::setBacklight(0);
+    BgRenderer::drawFull(gHomeBg);
+    Display::setBacklight(100);
+
+    SpriteRenderer::setAnimation("IDLE");
+    SpriteRenderer::drawFrame();
+
+    Ui::invalidate();
+    Ui::begin();
+    Ui::drawButtons();
+    homeHud();
+    Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+
+    gScreen = Screen::Home;
+    Serial.printf("[UI] pantalla principal: fons=%s mascota %ux%u a (%d,%d)\n",
+                  gHomeBg,
+                  static_cast<unsigned>(SpriteRenderer::status().boxW),
+                  static_cast<unsigned>(SpriteRenderer::status().boxH),
+                  SpriteRenderer::status().x, SpriteRenderer::status().y);
+}
+
+void playTempAnim(const char* name, uint32_t ms)
+{
+    SpriteRenderer::setAnimation(name);
+    strlcpy(gTempAnim, name, sizeof(gTempAnim));
+    gTempAnimUntil = millis() + ms;
+}
+
+void doFeed()
+{
+    gHunger = clampAdd(gHunger, 18);
+    gHappiness = clampAdd(gHappiness, 4);
+    playTempAnim("EAT", 1500);
+    Serial.printf("[UI] Menjar -> gana %u\n", static_cast<unsigned>(gHunger));
+}
+
+void doPlay()
+{
+    gHappiness = clampAdd(gHappiness, 15);
+    gEnergy = clampAdd(gEnergy, -10);
+    gHunger = clampAdd(gHunger, -3);
+    playTempAnim("PLAY", 1500);
+    Serial.printf("[UI] Jugar -> felicitat %u\n", static_cast<unsigned>(gHappiness));
+}
+
+void doSleepToggle()
+{
+    gTempAnimUntil = 0;
+    if (gPetBase == PetBase::Sleep) {
+        gPetBase = PetBase::Idle;
+        Display::setBacklight(100);
+        Serial.println(F("[UI] Despertar"));
+    } else {
+        gPetBase = PetBase::Sleep;
+        Display::setBacklight(35);
+        Serial.println(F("[UI] A dormir (llum atenuada)"));
+    }
+}
+
+void doHeal()
+{
+    gHealth = clampAdd(gHealth, 25);
+    playTempAnim("CELEBRATE", 1200);
+    Serial.printf("[UI] Curar -> salut %u\n", static_cast<unsigned>(gHealth));
+}
+
+void doPet()
+{
+    if (millis() - gPetCooldown < UI_PET_COOLDOWN_MS) {
+        return;
+    }
+    gPetCooldown = millis();
+    gHappiness = clampAdd(gHappiness, 3);
+    playTempAnim("HAPPY", 1000);
+
+    int16_t px = 0;
+    int16_t py = 0;
+    int16_t pw = 0;
+    int16_t ph = 0;
+    Ui::petRect(px, py, pw, ph);
+    gHeartX = static_cast<int16_t>(px + pw - pw / 4 + (static_cast<int>(millis() % 21) - 10));
+    gHeartY = static_cast<int16_t>(py + ph / 4);
+    gHeartUntil = millis() + UI_HEART_MS;
+    Serial.println(F("[UI] Caricia!"));
+}
+
+/* Marca visualment un boto com premut durant un instant. */
+void flashButton(Ui::Zone zone)
+{
+    Ui::setButtonPressed(zone, true);
+    gBtnFlash = zone;
+    gBtnFlashUntil = millis() + 150;
+}
+
 /* --- Pantalles de la targeta SD ------------------------------------------- */
 
 void drawSdError()
@@ -471,7 +647,7 @@ void printHelp()
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
                      "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
-                     "| petreset"));
+                     "| petreset | home | act <feed|play|sleep|heal|pet>"));
 }
 
 void printInfo()
@@ -536,6 +712,24 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "colortest") == 0) {
         gScreen = Screen::Static;
         drawColourBands();
+    } else if (strcmp(cmd, "act") == 0) {
+        if (arg == nullptr) {
+            Serial.println(F("[UI] us: act <feed|play|sleep|heal|pet>"));
+        } else if (strcmp(arg, "feed") == 0) {
+            doFeed();
+        } else if (strcmp(arg, "play") == 0) {
+            doPlay();
+        } else if (strcmp(arg, "sleep") == 0) {
+            doSleepToggle();
+        } else if (strcmp(arg, "heal") == 0) {
+            doHeal();
+        } else if (strcmp(arg, "pet") == 0) {
+            doPet();
+        } else {
+            Serial.println(F("[UI] accio desconeguda"));
+        }
+    } else if (strcmp(cmd, "home") == 0) {
+        startHome();
     } else if (strcmp(cmd, "bg") == 0) {
         gScreen = Screen::Gallery;
         const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
@@ -719,9 +913,7 @@ void setup()
     if (SdAssets::begin()) {
         SdAssets::printTree(Serial, "/", 2);
         BgRenderer::begin();
-        showBackgroundIndex(0);
-        gScreen = Screen::Gallery;
-        gBgTimer = millis();
+        startHome();
     } else {
         drawSdError();
         gScreen = Screen::Static;
@@ -749,7 +941,70 @@ void loop()
         Touch::getCoords(x, y);
     }
 
-    if (gScreen == Screen::Gallery) {
+    if (gScreen == Screen::Home) {
+        if (SpriteRenderer::isActive()) {
+            /* Animacio base (IDLE/SLEEP) o animacio temporal en curs. */
+            if (gTempAnimUntil != 0) {
+                if (millis() >= gTempAnimUntil) {
+                    gTempAnimUntil = 0;
+                    SpriteRenderer::setAnimation(gPetBase == PetBase::Sleep ? "SLEEP" : "IDLE");
+                }
+            } else {
+                const char* want = (gPetBase == PetBase::Sleep) ? "SLEEP" : "IDLE";
+                if (strcmp(SpriteRenderer::animationName(), want) != 0) {
+                    SpriteRenderer::setAnimation(want);
+                }
+            }
+
+            SpriteRenderer::update(millis());
+
+            if (gHeartUntil != 0) {
+                if (millis() < gHeartUntil) {
+                    Ui::drawHeart(gHeartX, gHeartY);
+                } else {
+                    gHeartUntil = 0;
+                }
+            }
+        }
+
+        homeHud();
+        Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+
+        if (tap) {
+            switch (Ui::hitTest(x, y)) {
+                case Ui::Zone::Feed:  flashButton(Ui::Zone::Feed);  doFeed();  break;
+                case Ui::Zone::Play:  flashButton(Ui::Zone::Play);  doPlay();  break;
+                case Ui::Zone::Sleep: flashButton(Ui::Zone::Sleep); doSleepToggle(); break;
+                case Ui::Zone::Heal:  flashButton(Ui::Zone::Heal);  doHeal();  break;
+                case Ui::Zone::Pet:   doPet(); break;
+                case Ui::Zone::HudClock:
+                    gPressStart = millis();
+                    gLongPressDone = false;
+                    break;
+                default: break;
+            }
+        }
+
+        /* Premuda llarga al rellotge del HUD = menu d'ajustos (Fase 7). */
+        if (pressed && Ui::hitTest(x, y) == Ui::Zone::HudClock) {
+            if (gPressStart == 0) {
+                gPressStart = millis();
+            }
+            if (!gLongPressDone && (millis() - gPressStart >= UI_LONGPRESS_MS)) {
+                gLongPressDone = true;
+                Serial.println(F("[UI] premuda llarga al rellotge -> menu d'ajustos (Fase 7)"));
+            }
+        } else {
+            gPressStart = 0;
+            gLongPressDone = false;
+        }
+
+        /* Apaga el marc de boto premut passat un instant. */
+        if (gBtnFlash != Ui::Zone::None && millis() >= gBtnFlashUntil) {
+            Ui::setButtonPressed(gBtnFlash, false);
+            gBtnFlash = Ui::Zone::None;
+        }
+    } else if (gScreen == Screen::Gallery) {
         const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
         if (bgs.count > 0) {
             if (tap || (millis() - gBgTimer >= BG_GALLERY_INTERVAL_MS)) {
@@ -817,9 +1072,7 @@ void loop()
         if (SdAssets::begin()) {
             SdAssets::printTree(Serial, "/", 2);
             BgRenderer::begin();
-            showBackgroundIndex(0);
-            gScreen = Screen::Gallery;
-            gBgTimer = millis();
+            startHome();
         }
     }
 

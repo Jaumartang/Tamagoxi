@@ -5,7 +5,22 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 3** — mascota 2× animada sobre el fons (streaming).
+> Estat actual: **Fase 4** — tàctil calibrat, HUD, barres i 4 botons grans.
+
+## Pantalla principal (Fase 4)
+
+```
+y 0..40    HUD: hora · icona/temperatura · WiFi
+y 80..336  MASCOTA (256×256)         <- només la toca SpriteRenderer
+y 336..400 barres: gana · felicitat · energia · salut
+y 400..480 botons: Menjar · Jugar · Dormir · Curar  (80×80)
+```
+
+- El **HUD i les barres** es repinten només quan canvia alguna cosa; els botons, un sol cop.
+- **Tocar la mascota** = carícia (anim `HAPPY` + cor, amb cooldown).
+- **Botons** = accions (de moment ajusten valors de prova; la Fase 5 hi posa el joc real).
+- **Mantenir premut el rellotge** (2 s) = futur menú d'ajustos (Fase 7).
+- El rellotge mostra l'**uptime** com a marcador fins que el NTP arribi a la Fase 6.
 
 ## Rendiment (mesurat)
 
@@ -104,6 +119,9 @@ En arrencar:
 | `anim <NAME\|next>` | Canvia l'animació de la mascota |
 | `petscale <1-3>` | Canvia la mida de la mascota (limitada al que cap a la pantalla) |
 | `petpos <x> <y>\|center` | Mou la mascota (cantó superior-esquerre) o la centra horitzontalment |
+| `petreset` | Torna la mascota a la disposició per defecte de `config.h` |
+| `home` | Torna a la pantalla principal (HUD + mascota + barres + botons) |
+| `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués tocat el botó |
 | `bench [name]` | Mesura lectura SD vs push a pantalla d'un fons |
 | `tth <n>` | Llindar de pressió del tàctil (per defecte 400) |
 | `info` | Estat: heap, backlight, tàctil |
@@ -134,8 +152,9 @@ està al `.gitignore` i **no** es puja mai al repositori.
 
 ```
 include/  pins.h (mapa de pins)  tft_setup.h (TFT_eSPI)  config.h  secrets.example.h
-src/      main.cpp  display.*  led.*  touch.*  sd_assets.*  bg_renderer.*  sprite_renderer.*
+src/      main.cpp  display.*  led.*  touch.*  sd_assets.*  bg_renderer.*
+          sprite_renderer.*  ui.*  storage.*
 tools/    validate_sd.py
 ```
 
-Les fases següents hi afegeixen: `pet`, `ui`, `weather`, `storage`.
+Les fases següents hi afegeixen: `pet` (joc) i `weather`.
