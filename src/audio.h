@@ -18,6 +18,15 @@ namespace Audio {
 
 enum class Output : uint8_t { Dac, Bluetooth };
 
+/* Bluetooth: la placa pot fer d'altaveu (sink: el mobil hi envia la musica) o
+ * d'emissor (source: enviar la musica de la SD/radio a un altaveu Bluetooth). */
+enum class BtMode : uint8_t { Off, Sink, Source };
+void    btSetMode(BtMode mode);
+BtMode  btMode();
+bool    btConnected();
+const char* btName();          /* nom amb que ens veuen els altres */
+const char* btPeer();          /* dispositiu connectat ("" si cap) */
+
 void begin();
 
 /* Sortida activa (es pot canviar en calent). */

@@ -1,0 +1,13 @@
+# Prova de l'altaveu Bluetooth
+cmd bt
+wait 1
+log
+cmd bt sink
+wait 4
+log
+cmd info
+wait 1
+log
+cmd bt
+wait 1
+log

@@ -8,6 +8,9 @@
 #include "AudioTools.h"
 #include "AudioTools/AudioCodecs/CodecMP3Helix.h"
 #include "AudioTools/AudioCodecs/CodecWAV.h"
+#if AUDIO_BT
+#include "AudioTools/Communication/A2DPStream.h"
+#endif
 
 #include "tg_config.h"
 #include "pins.h"
@@ -232,6 +235,37 @@ volatile uint8_t gReqIndex = 0;
 volatile uint8_t gTrackCount = 0;
 TaskHandle_t     gTask     = nullptr;
 
+/* --- Bluetooth (A2DP) ------------------------------------------------------ */
+
+#if AUDIO_BT
+audio_tools::A2DPStream gA2dp;
+#endif
+volatile Audio::BtMode   gBtMode = Audio::BtMode::Off;
+bool                     gBtStarted = false;
+
+bool btBeginSink()
+{
+#if AUDIO_BT
+    if (gBtStarted) {
+        return true;
+    }
+    auto cfg = gA2dp.defaultConfig(audio_tools::RX_MODE);
+    cfg.name  = "Tamagoxi";
+    cfg.wait_for_connection = false;
+    if (!gA2dp.begin(cfg)) {
+        Serial.println(F("[BT] no s'ha pogut iniciar l'altaveu Bluetooth"));
+        return false;
+    }
+    gBtStarted = true;
+    Serial.printf("[BT] altaveu Bluetooth \"%s\" a punt (emparella-hi el mobil)\n",
+                  cfg.name);
+    return true;
+#else
+    Serial.println(F("[BT] Bluetooth no compilat en aquesta versio (-D AUDIO_BT=1)"));
+    return false;
+#endif
+}
+
 bool endsWith(const char* name, const char* ext)
 {
     const size_t n = strlen(name);
@@ -355,13 +389,36 @@ void playFile(uint8_t index)
 
 void playerTask(void*)
 {
+    uint8_t btBuf[512];
     for (;;) {
         if (gPlayReq) {
             gPlayReq = false;
             playFile(gReqIndex);
             gSt.playing = false;
         }
-        vTaskDelay(40 / portTICK_PERIOD_MS);
+
+        /* Mode altaveu Bluetooth: el mobil hi envia la musica (Spotify, radio...)
+         * i nosaltres la traiem pel DAC de la placa. */
+#if AUDIO_BT
+        if (gBtMode == Audio::BtMode::Sink && gBtStarted) {
+            if (gA2dp.available() > 0) {
+                const size_t n = gA2dp.readBytes(btBuf, sizeof(btBuf));
+                if (n > 0) {
+                    if (!dacActive()) {
+                        dacBegin(AUDIO_SAMPLE_RATE);
+                    }
+                    audio_tools::AudioInfo info;
+                    info.sample_rate     = 44100;
+                    info.channels        = 2;
+                    info.bits_per_sample = 16;
+                    gDacSink.setAudioInfo(info);
+                    gDacSink.write(btBuf, n);
+                }
+            }
+        }
+#endif
+
+        vTaskDelay(20 / portTICK_PERIOD_MS);
     }
 }
 
@@ -651,6 +708,44 @@ void printStatus()
     Serial.printf("[AUDIO] sortida=%s volum=%u dac=%s\n",
                   (gOutput == Output::Dac) ? "DAC (placa)" : "Bluetooth",
                   static_cast<unsigned>(gVolume), gDacReady ? "iniciat" : "aturat");
+    Serial.printf("[BT] mode=%s iniciat=%d connectat=%d\n",
+                  (gBtMode == BtMode::Sink) ? "altaveu" :
+                  ((gBtMode == BtMode::Source) ? "emissor" : "apagat"),
+                  gBtStarted ? 1 : 0, btConnected() ? 1 : 0);
+}
+
+const char* btName()
+{
+    return "Tamagoxi";
+}
+
+bool btConnected()
+{
+#if AUDIO_BT
+    return gBtStarted && gA2dp.isConnected();
+#else
+    return false;
+#endif
+}
+
+BtMode btMode()
+{
+    return gBtMode;
+}
+
+void btSetMode(BtMode mode)
+{
+    if (mode == gBtMode) {
+        return;
+    }
+    if (mode == BtMode::Sink && !btBeginSink()) {
+        gBtMode = BtMode::Off;
+        return;
+    }
+    gBtMode = mode;
+    Serial.printf("[BT] mode -> %s\n",
+                  (mode == BtMode::Sink) ? "altaveu (sink: el mobil hi envia musica)"
+                                         : ((mode == BtMode::Source) ? "emissor" : "apagat"));
 }
 
 }  // namespace Audio

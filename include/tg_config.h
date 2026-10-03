@@ -97,6 +97,15 @@ static constexpr uint32_t AUDIO_SAMPLE_RATE = 44100;
 /* Pila de la tasca de so (el decodificador MP3 en demana uns quants kB). */
 static constexpr uint32_t AUDIO_TASK_STACK  = 8192;
 
+/* Bluetooth (A2DP). NOMES per a compilacions on es renuncia al WiFi (meteo):
+ * la pila Bluetooth d'aquest ESP32 (sense PSRAM) reserva uns 90 kB i, amb el
+ * WiFi, la pantalla i el reproductor, la memoria no hi arriba. Per provar-ho:
+ *     pio run -t upload -D AUDIO_BT=1
+ */
+#ifndef AUDIO_BT
+#define AUDIO_BT 0
+#endif
+
 /* Fons que es fa servir a la pantalla de prova de la mascota. */
 static constexpr const char* PET_TEST_BG = "spring";
 

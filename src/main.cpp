@@ -1202,6 +1202,16 @@ void handleCommand(char* cmd)
         if (Audio::writeTestWav(name, static_cast<uint16_t>(secs))) {
             Audio::scan();
         }
+    } else if (strcmp(cmd, "bt") == 0) {
+        if (arg == nullptr || strcmp(arg, "status") == 0) {
+            Audio::printStatus();
+        } else if (strcmp(arg, "sink") == 0) {
+            Audio::btSetMode(Audio::BtMode::Sink);
+        } else if (strcmp(arg, "off") == 0) {
+            Audio::btSetMode(Audio::BtMode::Off);
+        } else {
+            Serial.println(F("[BT] us: bt [sink|off|status]"));
+        }
     } else if (strcmp(cmd, "tap") == 0) {
         int tx = 0;
         int ty = 0;
