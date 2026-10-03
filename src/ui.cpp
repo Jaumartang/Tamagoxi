@@ -14,16 +14,16 @@ TFT_eSPI& gfx()
     return Display::driver();
 }
 
-/* Colors (RGB565) vius i amables. */
-constexpr uint16_t kColHunger = 0xFD20;   /* taronja */
-constexpr uint16_t kColHappy  = 0xFFE0;   /* groc */
-constexpr uint16_t kColEnergy = 0x07E0;   /* verd */
-constexpr uint16_t kColHealth = 0xF800;   /* vermell */
+/* Colors (RGB565). Paleta rosa / lila / violeta (pensada per a una nena). */
+constexpr uint16_t kColHunger = 0xFD4B;   /* préssec */
+constexpr uint16_t kColHappy  = 0xFC77;   /* rosa */
+constexpr uint16_t kColEnergy = 0x8F15;   /* menta */
+constexpr uint16_t kColHealth = 0xEA30;   /* fúcsia */
 constexpr uint16_t kDim       = 0x7BEF;   /* gris clar */
-constexpr uint16_t kPanelBg   = 0x18E3;   /* gris fosc dels panells */
-constexpr uint16_t kPanelEdge = 0x4A49;   /* vora dels panells */
-constexpr uint16_t kBarTrack  = 0x39E7;   /* fons de les barres */
-constexpr uint16_t kAccent    = 0x2C7F;   /* blau del boto MENU / capcalera */
+constexpr uint16_t kPanelBg   = 0x418B;   /* lila fosc (panells i HUD) */
+constexpr uint16_t kPanelEdge = 0xCD1B;   /* lila clar (vores) */
+constexpr uint16_t kBarTrack  = 0x6AB0;   /* lila mitjà (fons de les barres) */
+constexpr uint16_t kAccent    = 0xEA94;   /* rosa fort (boto MENU) */
 
 constexpr int kBarRowH = (UI_BARS_BOT - UI_BARS_TOP) / 4;                          /* 17 px */
 constexpr int kActionW = UI_BARS_PANEL_R / 4;                                      /* 64 px */
@@ -154,13 +154,14 @@ void drawHud(const Hud& hud)
     gHudDrawn = true;
 
     TFT_eSPI& t = gfx();
-    t.fillRect(0, UI_HUD_TOP, SCREEN_W, UI_HUD_H, TFT_BLACK);
+    t.fillRect(0, UI_HUD_TOP, SCREEN_W, UI_HUD_H, kPanelBg);
+    t.drawLine(0, UI_HUD_H - 1, SCREEN_W - 1, UI_HUD_H - 1, kPanelEdge);
 
     /* Hora (esquerra). */
     char buf[16];
     t.setTextDatum(ML_DATUM);
     t.setTextFont(4);
-    t.setTextColor(TFT_WHITE, TFT_BLACK);
+    t.setTextColor(TFT_WHITE, kPanelBg);
     if (hud.timeValid) {
         snprintf(buf, sizeof(buf), "%02u:%02u", static_cast<unsigned>(hud.hour),
                  static_cast<unsigned>(hud.minute));
@@ -176,13 +177,13 @@ void drawHud(const Hud& hud)
         t.fillCircle(tx - 18, UI_HUD_TOP + UI_HUD_H / 2, 8, 0xFFE0);
         t.setTextDatum(ML_DATUM);
         t.setTextFont(4);
-        t.setTextColor(TFT_WHITE, TFT_BLACK);
+        t.setTextColor(TFT_WHITE, kPanelBg);
         t.drawString(buf, tx, UI_HUD_TOP + UI_HUD_H / 2);
         t.drawCircle(tx + t.textWidth(buf) + 5, UI_HUD_TOP + UI_HUD_H / 2 - 8, 4, TFT_WHITE);
     } else {
         t.setTextDatum(MR_DATUM);
         t.setTextFont(2);
-        t.setTextColor(kDim, TFT_BLACK);
+        t.setTextColor(kDim, kPanelBg);
         t.drawString("--", SCREEN_W / 2, UI_HUD_TOP + UI_HUD_H / 2);
     }
 
@@ -225,7 +226,7 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
 
 namespace {
 
-constexpr uint16_t kRowCol[4] = {0xFC60, 0x2C7F, 0x7A1F, 0x07E0};  /* tarong., blau, lila, verd */
+constexpr uint16_t kRowCol[4] = {0xF3CF, 0xE294, 0x8A36, 0xAB79};  /* coral, rosa, violeta, lila */
 
 void drawActionButton(int i, uint16_t col, const char* label)
 {
@@ -319,7 +320,7 @@ void drawMenu(bool sleeping)
     const int by = UI_MENU_BTN_TOP;
     const int bw = SCREEN_W - bx;
     const int bh = UI_MENU_BTN_BOT - by;
-    const uint16_t closeCol = 0xB105;   /* vermell */
+    const uint16_t closeCol = 0xC9ED;   /* fúcsia fosc */
     t.fillRect(bx, by, bw, bh, closeCol);
     t.drawLine(bx, by, bx, by + bh - 1, kPanelEdge);
     t.drawLine(bx, by, SCREEN_W - 1, by, kPanelEdge);
