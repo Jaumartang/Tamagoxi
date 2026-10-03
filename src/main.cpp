@@ -890,7 +890,7 @@ void printHelp()
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
                      "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s> "
                      "| theme [n] | homebg [nom|auto] | wifi [ssid pass] | net | meteo "
-                     "| geo <lat> <lon> | tap <x> <y> | beep [freq ms vol] | audio [dac|bt|vol n]"));
+                     "| geo <lat> <lon> | tap <x> <y> | beep [freq ms vol] | audio [dac|bt|vol n] | bt [source|sink|off]"));
 }
 
 void printInfo()
@@ -1152,7 +1152,10 @@ void handleCommand(char* cmd)
         } else if (strcmp(arg, "dac") == 0) {
             Audio::setOutput(Audio::Output::Dac);
         } else if (strcmp(arg, "bt") == 0) {
+            /* Sortida Bluetooth: la musica va als auriculars (emissor A2DP). */
             Audio::setOutput(Audio::Output::Bluetooth);
+            Audio::btSetMode(Audio::BtMode::Source);
+            Audio::printStatus();
         } else if (strncmp(arg, "vol ", 4) == 0) {
             Audio::setVolume(static_cast<uint8_t>(atoi(arg + 4)));
             Audio::printStatus();
@@ -1205,12 +1208,17 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "bt") == 0) {
         if (arg == nullptr || strcmp(arg, "status") == 0) {
             Audio::printStatus();
+        } else if (strcmp(arg, "source") == 0) {
+            Audio::btSetMode(Audio::BtMode::Source);   /* musica -> auriculars */
+            Audio::setOutput(Audio::Output::Bluetooth);
         } else if (strcmp(arg, "sink") == 0) {
             Audio::btSetMode(Audio::BtMode::Sink);
         } else if (strcmp(arg, "off") == 0) {
             Audio::btSetMode(Audio::BtMode::Off);
+            Audio::setOutput(Audio::Output::Dac);
         } else {
-            Serial.println(F("[BT] us: bt [sink|off|status]"));
+            Serial.println(F("[BT] us: bt [source|sink|off|status]"
+                             "  (source = musica cap als auriculars)"));
         }
     } else if (strcmp(cmd, "tap") == 0) {
         int tx = 0;

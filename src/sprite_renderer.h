@@ -46,6 +46,13 @@ bool begin();
 void end();
 bool isActive();
 
+/* Allibera els buffers grossos (sprite + franja + composicio, ~60 kB) per
+ * deixar memoria a la pila Bluetooth, i els torna a reservar. Mentre esta
+ * suspesa, la mascota no es dibuixa (isActive() retorna false). */
+bool suspend();
+bool resume();
+bool suspended();
+
 /* Fons sobre el qual es compondra la mascota (nom sense extensio). */
 void setBackground(const char* name);
 const char* backgroundName();

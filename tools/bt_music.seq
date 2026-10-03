@@ -1,0 +1,13 @@
+# Prova: musica de la SD cap als auriculars Bluetooth
+cmd bt source
+wait 8
+log
+cmd music play 1
+wait 10
+log
+cmd music
+wait 1
+log
+cmd info
+wait 1
+log

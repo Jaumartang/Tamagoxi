@@ -8,6 +8,7 @@
 #include "tg_config.h"
 #include "net.h"
 #include "pins.h"
+#include "sprite_renderer.h"
 
 #include "AudioTools.h"
 #include "AudioTools/AudioCodecs/CodecMP3Helix.h"
@@ -26,6 +27,7 @@ bool          gDacReady = false;
 uint32_t      gDacRate = 0;
 
 void dacWrite(const uint16_t* samples, size_t count);
+void outWrite(const uint16_t* samples, size_t count);
 void dacSetRate(uint32_t rate);
 bool dacActive();
 
@@ -83,7 +85,7 @@ class DacSink : public audio_tools::AudioStream {
                     buf[2 * i] = v;
                     buf[2 * i + 1] = v;
                 }
-                dacWrite(buf, n * 2);
+                outWrite(buf, n * 2);
                 done += n;
             }
             return len;
@@ -93,12 +95,12 @@ class DacSink : public audio_tools::AudioStream {
         constexpr size_t kMaxSamples = 2048;
         size_t done = 0;
         if (samples <= kMaxSamples) {
-            dacWrite(src, samples);
+            outWrite(src, samples);
             return len;
         }
         while (done < samples) {
             const size_t n = (samples - done > kMaxSamples) ? kMaxSamples : (samples - done);
-            dacWrite(src + done, n);
+            outWrite(src + done, n);
             done += n;
         }
         return len;
@@ -244,43 +246,69 @@ audio_tools::A2DPStream gA2dp;
 volatile Audio::BtMode   gBtMode = Audio::BtMode::Off;
 bool                     gBtStarted = false;
 
-bool btBeginSink()
+bool btBegin(audio_tools::RxTxMode rxtx, Audio::BtMode mode)
 {
 #if AUDIO_BT
     if (gBtStarted) {
         return true;
     }
 
-    /* La radio no pot fer WiFi i Bluetooth alhora: aturem el WiFi per alliberar
-     * la seva memoria abans d'encendre el Bluetooth. */
+    /* Aquest xip no te PSRAM i la pila Bluetooth en demana ~90 kB. Per fer-hi
+     * lloc: (1) la mascota deixa anar els seus buffers grossos i (2) s'atura el
+     * WiFi, que tambe allibera memoria i, a mes, la radio no pot atendre'l
+     * mentre fa Bluetooth. */
+    SpriteRenderer::suspend();
     Net::setEnabled(false);
-    vTaskDelay(400 / portTICK_PERIOD_MS);
+    vTaskDelay(600 / portTICK_PERIOD_MS);
 
     const uint32_t freeHeap = ESP.getFreeHeap();
-    if (freeHeap < 90000) {
-        Serial.printf("[BT] memoria insuficient (%u kB lliures, en calen ~90): "
+    if (freeHeap < 70000) {
+        Serial.printf("[BT] memoria insuficient (%u kB lliures, en calen ~70): "
                       "no encenc el Bluetooth\n",
                       static_cast<unsigned>(freeHeap / 1024));
+        SpriteRenderer::resume();
         Net::setEnabled(true);
         return false;
     }
 
-    auto cfg = gA2dp.defaultConfig(audio_tools::RX_MODE);
+    auto cfg = gA2dp.defaultConfig(rxtx);
     cfg.name  = "Tamagoxi";
     cfg.wait_for_connection = false;
     if (!gA2dp.begin(cfg)) {
-        Serial.println(F("[BT] no s'ha pogut iniciar l'altaveu Bluetooth"));
+        Serial.println(F("[BT] no s'ha pogut iniciar el Bluetooth"));
+        SpriteRenderer::resume();
         Net::setEnabled(true);
         return false;
     }
     gBtStarted = true;
-    Serial.printf("[BT] altaveu Bluetooth \"%s\" a punt (emparella-hi el mobil)\n",
-                  cfg.name);
+    Serial.printf("[BT] \"%s\" a punt (%s, heap %u kB): %s\n", cfg.name,
+                  (mode == Audio::BtMode::Source) ? "emissor" : "altaveu",
+                  static_cast<unsigned>(ESP.getFreeHeap() / 1024),
+                  (mode == Audio::BtMode::Source)
+                      ? "emparella-hi uns auriculars i posa musica"
+                      : "emparella-hi el mobil i envia-hi musica");
     return true;
 #else
     Serial.println(F("[BT] Bluetooth no compilat en aquesta versio (-D AUDIO_BT=1)"));
     return false;
 #endif
+}
+
+/* Encamina un bloc de PCM estereo de 16 bits cap a la sortida activa: els
+ * auriculars (o altaveu) Bluetooth si estem en mode emissor, o el DAC de la
+ * placa (GPIO26 -> amplificador). */
+void outWrite(const uint16_t* samples, size_t count)
+{
+    if (count == 0) {
+        return;
+    }
+#if AUDIO_BT
+    if (gBtMode == Audio::BtMode::Source && gBtStarted && gA2dp.isConnected()) {
+        gA2dp.write(reinterpret_cast<const uint8_t*>(samples), count * 2u);
+        return;
+    }
+#endif
+    dacWrite(samples, count);
 }
 
 bool endsWith(const char* name, const char* ext)
@@ -313,8 +341,8 @@ void playFile(uint8_t index)
     if (index >= gTrackCount) {
         return;
     }
-    if (gOutput != Audio::Output::Dac) {
-        Serial.println(F("[AUDIO] la sortida Bluetooth encara no esta implementada"));
+    if (gOutput != Audio::Output::Dac && gBtMode != Audio::BtMode::Source) {
+        Serial.println(F("[AUDIO] activa el Bluetooth (bt source) o passa a la sortida de placa"));
         return;
     }
     if (!dacBegin(AUDIO_SAMPLE_RATE)) {
@@ -755,17 +783,37 @@ void btSetMode(BtMode mode)
     if (mode == gBtMode) {
         return;
     }
-    if (mode == BtMode::Sink && !btBeginSink()) {
-        gBtMode = BtMode::Off;
-        return;
+    if (mode != BtMode::Off) {
+        /* Emissor (source): enviem la nostra musica a uns auriculars o altaveu
+         * Bluetooth. Altaveu (sink): el mobil hi envia la seva musica. */
+        const audio_tools::RxTxMode rxtx =
+            (mode == BtMode::Source) ? audio_tools::TX_MODE : audio_tools::RX_MODE;
+        if (!btBegin(rxtx, mode)) {
+            gBtMode = BtMode::Off;
+            return;
+        }
+    } else {
+#if AUDIO_BT
+        if (gBtStarted) {
+            gA2dp.end();
+            gBtStarted = false;
+        }
+#endif
+        /* La memoria que reserva la pila Bluetooth NOMES es recupera reiniciant
+         * (l'end() no la torna). Com que els buffers de la mascota s'han hagut
+         * d'alliberar per encabir-hi el Bluetooth, reiniciem per tenir-la de nou
+         * i no deixar la consola a mitges. */
+        Serial.println(F("[BT] reiniciant per recuperar la mascota..."));
+        Serial.flush();
+        vTaskDelay(300 / portTICK_PERIOD_MS);
+        ESP.restart();
     }
     gBtMode = mode;
-    if (mode == BtMode::Off) {
-        Net::setEnabled(true);      /* el WiFi pot tornar */
-    }
     Serial.printf("[BT] mode -> %s\n",
                   (mode == BtMode::Sink) ? "altaveu (sink: el mobil hi envia musica)"
-                                         : ((mode == BtMode::Source) ? "emissor" : "apagat"));
+                                         : ((mode == BtMode::Source)
+                                                ? "emissor (source: musica cap als auriculars)"
+                                                : "apagat"));
 }
 
 }  // namespace Audio

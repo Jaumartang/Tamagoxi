@@ -1,0 +1,10 @@
+# Prova: apagar el Bluetooth recupera la mascota (reinici)
+cmd bt source
+wait 7
+log
+cmd bt off
+wait 12
+log
+cmd info
+wait 1
+log

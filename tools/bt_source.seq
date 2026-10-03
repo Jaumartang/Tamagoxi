@@ -1,0 +1,19 @@
+# Prova de l'emissor Bluetooth (musica -> auriculars)
+cmd bt
+wait 1
+log
+cmd bt source
+wait 8
+log
+cmd info
+wait 1
+log
+cmd bt
+wait 1
+log
+cmd bt off
+wait 4
+log
+cmd info
+wait 1
+log

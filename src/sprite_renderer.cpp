@@ -18,6 +18,7 @@ uint8_t* gBgBand      = nullptr;   /* SCREEN_W * BG_BAND_LINES * 2 */
 uint8_t* gComp        = nullptr;   /* boxW * BG_BAND_LINES * 2 */
 
 SpriteRenderer::Status gStatus;
+bool     gSuspended   = false;
 int8_t   gAnimIndex   = -1;
 uint8_t  gFrame       = 0;
 int8_t   gLoadedAnim  = -1;
@@ -262,9 +263,47 @@ const char* animationName()
     return gStatus.anim;
 }
 
+/* Allibera els buffers grans i deixa la mascota aturada. Els torna a reservar
+ * amb resume(). Serveix per fer lloc a la pila Bluetooth (Fase 7). */
+bool suspend()
+{
+    if (gSuspended) {
+        return true;
+    }
+    const size_t spriteBytes = static_cast<size_t>(gStatus.spriteW) * gStatus.spriteH * 2u;
+    const size_t bgBytes     = static_cast<size_t>(SCREEN_W) * BG_BAND_LINES * 2u;
+    const size_t compBytes   = static_cast<size_t>(gStatus.spriteW) * gMaxScale
+                               * BG_BAND_LINES * 2u;
+    freeBuffers();
+    gSuspended    = true;
+    gStatus.active = false;
+    gLoadedAnim   = -1;
+    gLoadedFrame  = -1;
+    Serial.printf("[PET] mascota suspesa: %u B alliberats (sprite %u + franges %u)\n",
+                  static_cast<unsigned>(spriteBytes + bgBytes + compBytes),
+                  static_cast<unsigned>(spriteBytes),
+                  static_cast<unsigned>(bgBytes + compBytes));
+    return true;
+}
+
+bool resume()
+{
+    if (!gSuspended) {
+        return true;
+    }
+    gSuspended = false;
+    gStatus.active = false;      /* forcem que begin() torni a reservar */
+    return begin();
+}
+
+bool suspended()
+{
+    return gSuspended;
+}
+
 uint32_t drawFrame()
 {
-    if (!gStatus.active || gAnimIndex < 0) {
+    if (!gStatus.active || gSuspended || gSpriteFrame == nullptr || gAnimIndex < 0) {
         return 0;
     }
     const SdAssets::Pet& pet = SdAssets::pet(0);
