@@ -64,7 +64,10 @@ bool mountCard()
             digitalWrite(PIN_SD_CS, HIGH);
             delay(50UL << (attempt - 1 > 3 ? 3 : attempt - 1));
         }
-        const uint32_t speed = (attempt < 2) ? 20000000UL : 4000000UL;
+        /* Escala de velocitats: primer les rapides i, si fallen, les segures. */
+        static const uint32_t kSpeeds[kMountAttempts] = {
+            25000000UL, 20000000UL, 10000000UL, 4000000UL};
+        const uint32_t speed = kSpeeds[attempt];
         mounted = SD.begin(PIN_SD_CS, gSpiSd, speed);
         if (mounted) {
             usedSpeed = speed;

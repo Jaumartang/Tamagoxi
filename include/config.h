@@ -58,3 +58,12 @@ static constexpr size_t CONSOLE_LINE_MAX = 48;
 static constexpr bool     BL_DIAG_ON_BOOT    = true;
 static constexpr uint32_t BL_DIAG_DIGITAL_MS = 900;
 static constexpr uint32_t BL_DIAG_PWM_MS     = 700;
+
+/* --- Renderitzat del fons (Fase 2) ---------------------------------------- */
+/* Files per franja en pintar un fons per streaming (320 x 24 x 2 B = 15.360 B). */
+static constexpr uint16_t BG_BAND_LINES = 24;
+/* Patro de carrega: apagar la retroil-luminacio mentre es pinta el fons, per
+ *que no es vegin les franges a mig pintar. */
+static constexpr bool BG_BACKLIGHT_OFF_ON_LOAD = true;
+/* Galeria de la Fase 2: temps entre fons (auto-avenc). */
+static constexpr uint32_t BG_GALLERY_INTERVAL_MS = 5000;

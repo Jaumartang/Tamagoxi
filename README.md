@@ -5,7 +5,17 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 1** — SD muntada, manifests llegits i mides validades.
+> Estat actual: **Fase 2** — fons a pantalla completa per franges, amb galeria.
+
+## Rendiment (mesurat)
+
+- Fons complet `320×480` (307.200 B) per franges de 24 files: **~271 ms**
+  (lectura SD ~204 ms → 1,5 MB/s; push a pantalla ~67 ms → 4,6 MB/s).
+- La lectura de la SD és el coll d'ampolla (depèn de la targeta; una targeta
+  moderna/Class 10 va més de pressa).
+- Patró de càrrega: mentre es pinta un fons, la retroil·luminació es posa a 0
+  (`BG_BACKLIGHT_OFF_ON_LOAD` a `config.h`) i es torna al 100 % quan el fons
+  sencer ja és a la pantalla, per no veure mai les franges a mig pintar.
 
 ## Maquinari
 
@@ -82,6 +92,8 @@ En arrencar:
 | `colortest` | Franges de colors (per verificar l'ordre RGB/BGR) |
 | `sd` | Remunta la SD, valida i mostra el resum a pantalla |
 | `lssd` | Escriu l'arbre de fitxers de la SD pel sèrie |
+| `bg <name\|next\|N>` | Mostra un fons concret, el següent o el número N |
+| `bench [name]` | Mesura lectura SD vs push a pantalla d'un fons |
 | `tth <n>` | Llindar de pressió del tàctil (per defecte 400) |
 | `info` | Estat: heap, backlight, tàctil |
 

@@ -1,5 +1,6 @@
 #include <Arduino.h>
 
+#include "bg_renderer.h"
 #include "config.h"
 #include "display.h"
 #include "led.h"
@@ -44,6 +45,14 @@ bool     gHasCross   = false;
 bool     gBtnLatched = false;
 uint32_t gHeapTimer  = 0;
 uint32_t gSdRetry    = 0;
+
+/* Pantalla activa: galeria de fons / test tactil / estatica (dibuixada per una
+ * comanda). El bucle nomes fa el que toca a cada mode. */
+enum class Screen : uint8_t { Gallery, TouchTest, Static };
+Screen   gScreen = Screen::Static;
+uint8_t  gBgIndex = 0;
+uint32_t gBgTimer = 0;
+bool     gTouchWasPressed = false;
 
 char     gLine[CONSOLE_LINE_MAX];
 uint16_t gLineLen = 0;
@@ -242,6 +251,49 @@ void runLoadDemo()
     drawTouchScreen();
 }
 
+/* --- Galeria de fons (Fase 2) --------------------------------------------- */
+
+void drawBgOverlay(const char* name, uint8_t idx, uint8_t count, uint32_t ms)
+{
+    TFT_eSPI& t = Display::driver();
+    t.fillRect(0, 0, SCREEN_W, 22, TFT_BLACK);
+    t.setTextFont(2);
+    t.setTextDatum(TL_DATUM);
+    t.setTextColor(TFT_YELLOW, TFT_BLACK);
+    char buf[48];
+    snprintf(buf, sizeof(buf), "%u/%u  %s  %lu ms", static_cast<unsigned>(idx + 1),
+             static_cast<unsigned>(count), name, static_cast<unsigned long>(ms));
+    t.drawString(buf, 4, 3);
+    t.setTextColor(TFT_WHITE, TFT_BLACK);
+}
+
+/* Mostra el fons 'idx'. Apaga la retroil-luminacio mentre es pinta (patro de
+ * carrega) i la torna a encendre quan el fons sencer ja es a la pantalla. */
+void showBackgroundIndex(uint8_t idx)
+{
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    if (bgs.count == 0) {
+        return;
+    }
+    gBgIndex = static_cast<uint8_t>(idx % bgs.count);
+    const char* name = bgs.names[gBgIndex];
+
+    if (BG_BACKLIGHT_OFF_ON_LOAD) {
+        Display::setBacklight(0);
+    }
+    const uint32_t ms = BgRenderer::drawFull(name);
+    if (BG_BACKLIGHT_OFF_ON_LOAD) {
+        Display::setBacklight(100);
+    }
+
+    drawBgOverlay(name, gBgIndex, bgs.count, ms);
+    Serial.printf("[BG] %u/%u  %s  %lu ms  (%u B)  %s\n",
+                  static_cast<unsigned>(gBgIndex + 1), static_cast<unsigned>(bgs.count),
+                  name, static_cast<unsigned long>(ms),
+                  static_cast<unsigned>(BgRenderer::status().lastBytes),
+                  BgRenderer::status().lastOk ? "ok" : "ERROR");
+}
+
 /* --- Pantalles de la targeta SD ------------------------------------------- */
 
 void drawSdError()
@@ -350,7 +402,7 @@ void drawSdScreen()
 void printHelp()
 {
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
-                     "| cal | touch | colortest | tth <n> | sd | lssd"));
+                     "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N>"));
 }
 
 void printInfo()
@@ -405,14 +457,41 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "loaddemo") == 0) {
         runLoadDemo();
     } else if (strcmp(cmd, "cal") == 0) {
+        gScreen = Screen::TouchTest;
         Touch::calibrate();
         drawTouchScreen();
         updateLed();
     } else if (strcmp(cmd, "touch") == 0) {
+        gScreen = Screen::TouchTest;
         drawTouchScreen();
     } else if (strcmp(cmd, "colortest") == 0) {
+        gScreen = Screen::Static;
         drawColourBands();
+    } else if (strcmp(cmd, "bg") == 0) {
+        gScreen = Screen::Gallery;
+        const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+        if (bgs.count == 0) {
+            Serial.println(F("[BG] cap fons (falta la SD?)"));
+        } else if (arg == nullptr || strcmp(arg, "next") == 0) {
+            showBackgroundIndex(static_cast<uint8_t>((gBgIndex + 1) % bgs.count));
+        } else if (arg[0] >= '0' && arg[0] <= '9') {
+            showBackgroundIndex(static_cast<uint8_t>(atoi(arg)));
+        } else {
+            bool found = false;
+            for (uint8_t i = 0; i < bgs.count; ++i) {
+                if (strcmp(bgs.names[i], arg) == 0) {
+                    showBackgroundIndex(i);
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                Serial.printf("[BG] fons desconegut: %s\n", arg);
+            }
+        }
+        gBgTimer = millis();
     } else if (strcmp(cmd, "sd") == 0) {
+        gScreen = Screen::Static;
         SdAssets::begin();
         SdAssets::printTree(Serial, "/", 3);
         if (SdAssets::isMounted()) {
@@ -425,6 +504,9 @@ void handleCommand(char* cmd)
             SdAssets::begin();
         }
         SdAssets::printTree(Serial, "/", 5);
+    } else if (strcmp(cmd, "bench") == 0) {
+        const char* which = (arg != nullptr) ? arg : "weather_00";
+        BgRenderer::bench(which);
     } else if (strcmp(cmd, "tth") == 0) {
         if (arg != nullptr) {
             Touch::setPressureThreshold(static_cast<uint16_t>(atoi(arg)));
@@ -510,10 +592,14 @@ void setup()
 
     Serial.println(F("[SD] escanejant la targeta..."));
     if (SdAssets::begin()) {
-        SdAssets::printTree(Serial, "/", 3);
-        drawSdScreen();
+        SdAssets::printTree(Serial, "/", 2);
+        BgRenderer::begin();
+        showBackgroundIndex(0);
+        gScreen = Screen::Gallery;
+        gBgTimer = millis();
     } else {
         drawSdError();
+        gScreen = Screen::Static;
         gSdRetry = millis();
     }
 
@@ -529,30 +615,42 @@ void loop()
     Touch::update();
 
     const bool pressed = Touch::isPressed();
+    const bool tap = pressed && !gTouchWasPressed;  /* flanc de pujada */
+    gTouchWasPressed = pressed;
+
     int16_t x = -1;
     int16_t y = -1;
     if (pressed) {
         Touch::getCoords(x, y);
     }
 
-    /* Boto CALIBRAR (zona de baix). Cal calibratge previ per tenir coordenades. */
-    if (pressed && Touch::isCalibrated() && y >= kButtonTop) {
-        if (!gBtnLatched) {
-            gBtnLatched = true;
-            drawButton(true);
-            Touch::calibrate();
-            drawTouchScreen();
-            updateLed();
+    if (gScreen == Screen::Gallery) {
+        const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+        if (bgs.count > 0) {
+            if (tap || (millis() - gBgTimer >= BG_GALLERY_INTERVAL_MS)) {
+                showBackgroundIndex(static_cast<uint8_t>((gBgIndex + 1) % bgs.count));
+                gBgTimer = millis();
+            }
         }
-    } else {
-        gBtnLatched = false;
-        if (pressed && Touch::isCalibrated() && y >= kCanvasTop && y < kButtonTop) {
-            drawCrosshair(x, y);
+    } else if (gScreen == Screen::TouchTest) {
+        /* Boto CALIBRAR (zona de baix). Cal calibratge previ per tenir coords. */
+        if (pressed && Touch::isCalibrated() && y >= kButtonTop) {
+            if (!gBtnLatched) {
+                gBtnLatched = true;
+                drawButton(true);
+                Touch::calibrate();
+                drawTouchScreen();
+                updateLed();
+            }
+        } else {
+            gBtnLatched = false;
+            if (pressed && Touch::isCalibrated() && y >= kCanvasTop && y < kButtonTop) {
+                drawCrosshair(x, y);
+            }
         }
-    }
-
-    if (pressed) {
-        updateInfo();
+        if (pressed) {
+            updateInfo();
+        }
     }
 
     /* Reintent de muntatge de la SD si no n'hi ha (mai ens pengem). */
@@ -560,8 +658,11 @@ void loop()
         gSdRetry = millis();
         Serial.println(F("[SD] reintent de muntatge..."));
         if (SdAssets::begin()) {
-            SdAssets::printTree(Serial, "/", 3);
-            drawSdScreen();
+            SdAssets::printTree(Serial, "/", 2);
+            BgRenderer::begin();
+            showBackgroundIndex(0);
+            gScreen = Screen::Gallery;
+            gBgTimer = millis();
         }
     }
 
