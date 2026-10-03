@@ -7,6 +7,24 @@ lògica del joc.
 
 > Estat actual: **Fase 6.5** — xarxa (WiFi, NTP i meteo) + menú de dalt i panell de WiFi amb teclat.
 
+## So i música (Fase 7) — `src/audio.*`
+
+La placa té un amplificador (**FM8002E**) amb l'entrada al **GPIO26** (DAC2 intern
+de l'ESP32) i connector per a altaveu extern. El so viu en una **tasca pròpia**
+(nucli 0), així que la mascota i el tàctil no s'encallen mai mentre sona.
+
+- **Sortida**: `audio dac` (altaveu de la placa). `audio bt` (Bluetooth) encara
+  està en construcció.
+- **Música**: fitxers **`.mp3`** i **`.wav`** de la carpeta **`/music`** de la SD.
+  El decodificador (`arduino-audio-tools` + `libhelix`) ajusta sol la freqüència
+  de mostreig i els canals segons el fitxer.
+- **Panell de Música** (al menú de dalt): cançó actual amb temps i barra de
+  progrés, transport (⏮ ⏯ ⏭), volum (−/+) i llista de cançons amb
+  desplaçament (es pot tocar qualsevol per reproduir-la).
+- **`wavgen [nom] [segons]`**: crea una melodia de prova a `/music` per
+  comprovar que se sent, sense necessitat d'ordinador.
+- **`beep [freq ms vol]`**: to de prova directe (per validar l'altaveu).
+
 ## Menús i panells (Fase 6.5) — `src/ui_panels.*`
 
 El HUD té un **botó de ratlles** (a la dreta) que obre un desplegable:
@@ -243,6 +261,10 @@ En arrencar:
 | `meteo` | Refresca la meteo ara mateix |
 | `geo [lat lon]` | Consulta o canvia la ubicació de la meteo (es desa) |
 | `tap <x> <y>` | (proves) Injecta un toc a la pantalla sense fer servir el dit |
+| `music [scan\|list\|play n\|pause\|stop\|next\|prev]` | Reproductor: llista, tria i controla les cançons de `/music` |
+| `wavgen [nom] [segons]` | Crea un WAV de prova a `/music` (melodia) |
+| `beep [freq ms vol]` | To de prova per validar l'altaveu |
+| `audio [dac\|bt\|vol n]` | Sortida d'àudio (DAC de la placa / Bluetooth) i volum |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |

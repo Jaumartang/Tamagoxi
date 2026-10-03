@@ -1,0 +1,6 @@
+# La reproduccio ha de durar ~6 s (el WAV de prova)
+cmd music play 1
+wait 4
+log
+wait 6
+log

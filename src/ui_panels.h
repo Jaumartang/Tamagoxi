@@ -21,7 +21,7 @@
 
 namespace Panels {
 
-enum class Id : uint8_t { None, TopMenu, Wifi, Settings, About, Games };
+enum class Id : uint8_t { None, TopMenu, Wifi, Music, Settings, About, Games };
 
 /* Callbacks que main registra perque els panells puguin aplicar canvis. */
 struct Hooks {

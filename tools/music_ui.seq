@@ -1,0 +1,11 @@
+# Obre el panell de Musica i reprodueix la primera canço
+cmd home
+wait 3
+tap 297 14
+wait 2
+tap 200 100
+wait 3
+log
+tap 150 258
+wait 2
+log

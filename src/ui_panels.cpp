@@ -5,6 +5,7 @@
 #include <WiFi.h>
 #include <time.h>
 
+#include "audio.h"
 #include "tg_config.h"
 #include "display.h"
 #include "led.h"
@@ -33,8 +34,21 @@ constexpr int kMenuY = UI_HUD_H;
 constexpr int kMenuW = 208;
 constexpr int kRowH  = 44;
 constexpr int kRowGap = 4;
-constexpr int kMenuRows = 4;
-constexpr int kMenuH = 4 + kMenuRows * kRowH + (kMenuRows - 1) * kRowGap + 4;   /* 196 */
+constexpr int kMenuRows = 5;
+constexpr int kMenuH = 4 + kMenuRows * kRowH + (kMenuRows - 1) * kRowGap + 4;   /* 244 */
+
+/* --- Panell de musica ------------------------------------------------------ */
+constexpr int kNpY       = 44;      /* fitxa "sonant ara" */
+constexpr int kProgY     = 102;     /* barra de progrés */
+constexpr int kTransY    = 120;     /* transport */
+constexpr int kTransH    = 54;
+constexpr int kVolY      = 180;     /* volum */
+constexpr int kVolH      = 44;
+constexpr int kMListTop  = 236;     /* llista de cançons */
+constexpr int kMListRows = 4;
+constexpr int kMRowH     = 44;
+constexpr int kMBtnY     = 414;
+constexpr int kMBtnH     = 60;
 
 /* --- Panells a pantalla completa ------------------------------------------ */
 constexpr int kTitleH = 40;
@@ -77,6 +91,7 @@ bool     gPassShown   = true;
 bool     gShift       = false;
 bool     gSymbols     = false;
 uint8_t  gListTop     = 0;
+uint8_t  gMusicTop    = 0;
 uint8_t  gSelected    = 0;
 uint32_t gStartedMs   = 0;
 bool     gConnected   = false;
@@ -202,6 +217,16 @@ void iconGame(int cx, int cy)
     t.fillCircle(cx + 6, cy, 2, Ui::colorRow(1));
 }
 
+void iconMusic(int cx, int cy)
+{
+    TFT_eSPI& t = tft();
+    t.fillRect(cx - 4, cy - 11, 3, 18, kText);
+    t.fillRect(cx + 7, cy - 14, 3, 18, kText);
+    t.fillRect(cx - 4, cy - 11, 14, 3, kText);
+    t.fillCircle(cx - 7, cy + 7, 4, kText);
+    t.fillCircle(cx + 4, cy + 4, 4, kText);
+}
+
 void iconSliders(int cx, int cy)
 {
     TFT_eSPI& t = tft();
@@ -222,6 +247,8 @@ void iconInfo(int cx, int cy)
 /* --- Declaracions dels panells -------------------------------------------- */
 
 void showWifi();
+void showMusic();
+void drawMusic();
 void showSettings();
 void showAbout();
 void showGames();
@@ -244,7 +271,7 @@ void drawTopMenu()
     t.fillRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelBg());
     t.drawRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelEdge());
 
-    const char* labels[kMenuRows] = {"WiFi", "Jocs", "Ajustos", "Sobre"};
+    const char* labels[kMenuRows] = {"WiFi", "Musica", "Jocs", "Ajustos", "Sobre"};
     for (int i = 0; i < kMenuRows; ++i) {
         const int x = kMenuX + 4;
         const int y = kMenuY + 4 + i * (kRowH + kRowGap);
@@ -256,8 +283,9 @@ void drawTopMenu()
         const int icy = y + kRowH / 2;
         switch (i) {
             case 0: iconWifi(icx, icy, Net::connected()); break;
-            case 1: iconGame(icx, icy); break;
-            case 2: iconSliders(icx, icy); break;
+            case 1: iconMusic(icx, icy); break;
+            case 2: iconGame(icx, icy); break;
+            case 3: iconSliders(icx, icy); break;
             default: iconInfo(icx, icy); break;
         }
 
@@ -861,6 +889,188 @@ void handleKey(uint8_t index)
     drawPassField();
 }
 
+/* --- Panell de musica ------------------------------------------------------ */
+
+void drawNowPlaying()
+{
+    TFT_eSPI& t = tft();
+    const Audio::Status& st = Audio::status();
+
+    t.fillRoundRect(8, kNpY, SCREEN_W - 16, 52, 8, Ui::colorTrack());
+
+    char name[30];
+    if (st.name[0] != '\0') {
+        strlcpy(name, st.name, sizeof(name));
+    } else {
+        strlcpy(name, "Cap canco triada", sizeof(name));
+    }
+    t.setTextDatum(ML_DATUM);
+    t.setTextFont(2);
+    t.setTextColor(kText, Ui::colorTrack());
+    while (t.textWidth(name) > 200 && strlen(name) > 4) {
+        name[strlen(name) - 1] = '\0';
+    }
+    t.drawString(name, 16, kNpY + 17);
+
+    char times[28];
+    snprintf(times, sizeof(times), "%lu:%02lu / %lu:%02lu",
+             static_cast<unsigned long>(st.elapsedSec / 60),
+             static_cast<unsigned long>(st.elapsedSec % 60),
+             static_cast<unsigned long>(st.totalSec / 60),
+             static_cast<unsigned long>(st.totalSec % 60));
+    t.setTextFont(1);
+    t.setTextColor(kDimText, Ui::colorTrack());
+    t.drawString(times, 16, kNpY + 37);
+
+    t.setTextDatum(MR_DATUM);
+    t.setTextColor(st.playing ? (st.paused ? kWarn : kGood) : kDimText, Ui::colorTrack());
+    t.drawString(st.paused ? "en pausa" : (st.playing ? "sonant" : "aturat"),
+                 SCREEN_W - 16, kNpY + 37);
+    t.setTextDatum(ML_DATUM);
+
+    const int x = 8;
+    const int w = SCREEN_W - 16;
+    t.fillRoundRect(x, kProgY, w, 10, 5, Ui::colorTrack());
+    const int fw = (w * st.percent) / 100;
+    if (fw > 4) {
+        t.fillRoundRect(x, kProgY, fw, 10, 5, kGood);
+    }
+}
+
+void drawTransport()
+{
+    TFT_eSPI& t = tft();
+    const Audio::Status& st = Audio::status();
+    const int w = 96;
+    const int y = kTransY;
+    const int cy = y + kTransH / 2;
+
+    drawButton(8, y, w, kTransH, "", Ui::colorRow(0));
+    {
+        const int cx = 8 + w / 2;
+        t.fillTriangle(cx - 4, cy, cx + 6, cy - 9, cx + 6, cy + 9, kText);
+        t.fillRect(cx - 11, cy - 9, 4, 18, kText);
+    }
+
+    drawButton(112, y, w, kTransH, "", (st.playing && !st.paused) ? kGood : Ui::colorRow(1));
+    {
+        const int cx = 112 + w / 2;
+        if (st.playing && !st.paused) {
+            t.fillRect(cx - 8, cy - 10, 6, 20, kText);
+            t.fillRect(cx + 2, cy - 10, 6, 20, kText);
+        } else {
+            t.fillTriangle(cx - 7, cy - 11, cx - 7, cy + 11, cx + 10, cy, kText);
+        }
+    }
+
+    drawButton(216, y, w, kTransH, "", Ui::colorRow(2));
+    {
+        const int cx = 216 + w / 2;
+        t.fillTriangle(cx + 4, cy, cx - 6, cy - 9, cx - 6, cy + 9, kText);
+        t.fillRect(cx + 7, cy - 9, 4, 18, kText);
+    }
+}
+
+void drawVolumeRow()
+{
+    TFT_eSPI& t = tft();
+    drawButton(8, kVolY, 60, kVolH, "-", Ui::colorRow(3));
+    drawButton(252, kVolY, 60, kVolH, "+", Ui::colorRow(3));
+
+    const uint8_t v = Audio::volume();
+    const int bx = 76;
+    const int bw = 168;
+    const int by = kVolY + kVolH / 2 - 6;
+
+    t.fillRoundRect(bx, by, bw, 12, 6, Ui::colorTrack());
+    const int fw = (bw * v) / 100;
+    if (fw > 4) {
+        t.fillRoundRect(bx, by, fw, 12, 6, Ui::colorAccent());
+    }
+    t.setTextDatum(MC_DATUM);
+    t.setTextFont(1);
+    t.setTextColor(kText, Ui::colorTrack());
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%u%%", static_cast<unsigned>(v));
+    t.drawString(buf, bx + bw / 2, by + 6);
+    t.setTextDatum(ML_DATUM);
+    t.setTextColor(kDimText, Ui::colorPanelBg());
+    t.drawString("Volum", bx, kVolY + 2);
+}
+
+void drawMusicList()
+{
+    TFT_eSPI& t = tft();
+    t.fillRect(0, kMListTop, SCREEN_W, kMBtnY - kMListTop, Ui::colorPanelBg());
+
+    const Audio::Status& st = Audio::status();
+    if (st.count == 0) {
+        t.setTextDatum(MC_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(kDimText, Ui::colorPanelBg());
+        t.drawString("No hi ha cancons", SCREEN_W / 2, kMListTop + 40);
+        t.setTextFont(1);
+        t.drawString("Posa fitxers .mp3 a la carpeta /music", SCREEN_W / 2, kMListTop + 70);
+        t.drawString("de la targeta SD", SCREEN_W / 2, kMListTop + 88);
+        return;
+    }
+
+    for (uint8_t i = 0; i < kMListRows; ++i) {
+        const uint8_t idx = static_cast<uint8_t>(gMusicTop + i);
+        if (idx >= st.count) {
+            break;
+        }
+        const Audio::Track* tr = Audio::track(idx);
+        if (tr == nullptr) {
+            break;
+        }
+        const int y = kMListTop + i * kMRowH;
+        const bool cur = (idx == st.index) && st.playing;
+        const uint16_t col = cur ? kGood : Ui::colorTrack();
+        t.fillRoundRect(4, y + 1, 296, kMRowH - 4, 7, col);
+
+        char nm[30];
+        strlcpy(nm, tr->name, sizeof(nm));
+        t.setTextDatum(ML_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(kText, col);
+        while (t.textWidth(nm) > 240 && strlen(nm) > 4) {
+            nm[strlen(nm) - 1] = '\0';
+        }
+        t.drawString(nm, 16, y + kMRowH / 2);
+    }
+
+    if (st.count > kMListRows) {
+        const int ax = SCREEN_W - 16;
+        t.fillRoundRect(ax - 7, kMListTop + 2, 20, 38, 5, Ui::colorRow(3));
+        t.fillTriangle(ax, kMListTop + 11, ax - 6, kMListTop + 23, ax + 6, kMListTop + 23, kText);
+        const int by = kMListTop + kMListRows * kMRowH - 40;
+        t.fillRoundRect(ax - 7, by, 20, 38, 5, Ui::colorRow(3));
+        t.fillTriangle(ax, by + 27, ax - 6, by + 15, ax + 6, by + 15, kText);
+    }
+}
+
+void drawMusic()
+{
+    TFT_eSPI& t = tft();
+    t.fillRect(0, 0, SCREEN_W, SCREEN_H, Ui::colorPanelBg());
+    drawTitleBar("Musica");
+    drawNowPlaying();
+    drawTransport();
+    drawVolumeRow();
+    drawMusicList();
+    drawButton(8, kMBtnY, 148, kMBtnH, "Actualitza", Ui::colorRow(3));
+    drawButton(164, kMBtnY, 148, kMBtnH, "Tanca", Ui::colorClose());
+}
+
+void showMusic()
+{
+    gId = Panels::Id::Music;
+    gMusicTop = 0;
+    Audio::scan();
+    drawMusic();
+}
+
 }  // namespace
 
 namespace Panels {
@@ -875,6 +1085,7 @@ const char* name(Id id)
     switch (id) {
         case Id::TopMenu:  return "menu";
         case Id::Wifi:     return "wifi";
+        case Id::Music:    return "musica";
         case Id::Settings: return "ajustos";
         case Id::About:    return "sobre";
         case Id::Games:    return "jocs";
@@ -940,6 +1151,7 @@ void open(Id id)
     switch (id) {
         case Id::TopMenu:  openTopMenu(); break;
         case Id::Wifi:     showWifi(); break;
+        case Id::Music:    showMusic(); break;
         case Id::Settings: showSettings(); break;
         case Id::About:    showAbout(); break;
         case Id::Games:    showGames(); break;
@@ -966,6 +1178,16 @@ void topMenuRect(int16_t& x, int16_t& y, int16_t& w, int16_t& h)
 
 void update(uint32_t nowMs)
 {
+    if (gId == Id::Music) {
+        if (nowMs - gTimer >= 500) {
+            gTimer = nowMs;
+            drawNowPlaying();
+            drawTransport();
+            drawMusicList();
+        }
+        return;
+    }
+
     if (gId != Id::Wifi) {
         return;
     }
@@ -1016,8 +1238,9 @@ bool handleTap(int16_t x, int16_t y)
             if (x >= kMenuX && x < kMenuX + kMenuW && y >= ry && y < ry + kRowH) {
                 switch (i) {
                     case 0: showWifi(); break;
-                    case 1: showGames(); break;
-                    case 2: showSettings(); break;
+                    case 1: showMusic(); break;
+                    case 2: showGames(); break;
+                    case 3: showSettings(); break;
                     default: showAbout(); break;
                 }
                 return true;
@@ -1094,6 +1317,62 @@ bool handleTap(int16_t x, int16_t y)
                 Net::startScan();
                 drawWifiBottom();
                 drawWifiList();
+                return true;
+            }
+            return false;           /* Tanca */
+        }
+        return true;
+    }
+
+    /* --- Musica --- */
+    if (gId == Id::Music) {
+        const Audio::Status& st = Audio::status();
+        if (y >= kTransY && y < kTransY + kTransH) {
+            if (x >= 8 && x < 104) {
+                Audio::previous();
+            } else if (x >= 112 && x < 208) {
+                Audio::togglePause();
+            } else if (x >= 216 && x < 312) {
+                Audio::next();
+            }
+            drawMusic();
+            return true;
+        }
+        if (y >= kVolY && y < kVolY + kVolH) {
+            int v = Audio::volume();
+            if (x < 76) {
+                v = (v >= 10) ? (v - 10) : 0;
+                Audio::setVolume(static_cast<uint8_t>(v));
+                drawVolumeRow();
+            } else if (x >= 244) {
+                v = (v <= 90) ? (v + 10) : 100;
+                Audio::setVolume(static_cast<uint8_t>(v));
+                drawVolumeRow();
+            }
+            return true;
+        }
+        if (y >= kMListTop && y < kMListTop + kMListRows * kMRowH) {
+            if (st.count > kMListRows && x >= SCREEN_W - 30) {
+                if (y < kMListTop + (kMListRows * kMRowH) / 2) {
+                    gMusicTop = (gMusicTop > 0) ? (gMusicTop - 1) : 0;
+                } else if (gMusicTop + kMListRows < st.count) {
+                    ++gMusicTop;
+                }
+                drawMusicList();
+                return true;
+            }
+            const uint8_t row = static_cast<uint8_t>((y - kMListTop) / kMRowH);
+            const uint8_t idx = static_cast<uint8_t>(gMusicTop + row);
+            if (idx < st.count) {
+                Audio::play(idx);
+                drawMusic();
+            }
+            return true;
+        }
+        if (y >= kMBtnY && y < kMBtnY + kMBtnH) {
+            if (x < 160) {
+                Audio::scan();
+                drawMusic();
                 return true;
             }
             return false;           /* Tanca */

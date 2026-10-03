@@ -41,6 +41,15 @@ class DacSink : public audio_tools::AudioStream {
 
     void setAudioInfo(audio_tools::AudioInfo info) override
     {
+        if (info.channels > 0 && info.channels != gChannels) {
+            Serial.printf("[AUDIO] format: %u canals, %u bits\n", info.channels,
+                          info.bits_per_sample);
+        }
+        if (info.sample_rate > 0 && info.sample_rate != gPcmRate) {
+            Serial.printf("[AUDIO] mostra: %lu Hz (era %lu)\n",
+                          static_cast<unsigned long>(info.sample_rate),
+                          static_cast<unsigned long>(gPcmRate));
+        }
         gChannels = (info.channels > 0) ? info.channels : 2;
         const uint32_t rate = info.sample_rate ? info.sample_rate : AUDIO_SAMPLE_RATE;
         gPcmRate = rate;
@@ -362,6 +371,11 @@ namespace Audio {
 
 void begin()
 {
+    /* Els decodificadors han d'informar el sink del format del fitxer (freq. de
+     * mostreig i canals), si no el DAC aniria sempre a 44,1 kHz estereo. */
+    gDecMp3.addNotifyAudioChange(gDacSink);
+    gDecWav.addNotifyAudioChange(gDacSink);
+
     Serial.printf("[AUDIO] volum %u, sortida %s\n", static_cast<unsigned>(gVolume),
                   (gOutput == Output::Dac) ? "DAC (placa)" : "Bluetooth");
     xTaskCreatePinnedToCore(playerTask, "audio", AUDIO_TASK_STACK, nullptr, 2, &gTask, 0);

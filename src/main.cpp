@@ -1401,7 +1401,7 @@ void loop()
             }
         }
 
-        if (!Panels::isOpen() && SpriteRenderer::isActive()) {
+        if (!Panels::isOpen() && !Audio::isPlaying() && SpriteRenderer::isActive()) {
             const char* anim = Pet::animation();
             if (strcmp(SpriteRenderer::animationName(), anim) != 0) {
                 SpriteRenderer::setAnimation(anim);
