@@ -97,13 +97,14 @@ static constexpr uint32_t AUDIO_SAMPLE_RATE = 44100;
 /* Pila de la tasca de so (el decodificador MP3 en demana uns quants kB). */
 static constexpr uint32_t AUDIO_TASK_STACK  = 8192;
 
-/* Bluetooth (A2DP). NOMES per a compilacions on es renuncia al WiFi (meteo):
- * la pila Bluetooth d'aquest ESP32 (sense PSRAM) reserva uns 90 kB i, amb el
- * WiFi, la pantalla i el reproductor, la memoria no hi arriba. Per provar-ho:
- *     pio run -t upload -D AUDIO_BT=1
+/* Bluetooth (A2DP). La pila Bluetooth d'aquest ESP32 (sense PSRAM) reserva uns
+ * 90 kB estatics i, amb el WiFi, la pantalla i el reproductor, la memoria no hi
+ * arriba: per aixo, quan s'encen el Bluetooth es DESACTIVA el WiFi (la radio no
+ * pot fer les dues coses alhora de totes maneres) i es torna a activar en
+ * apagar-lo. Amb -D AUDIO_BT=0 es compila sense Bluetooth.
  */
 #ifndef AUDIO_BT
-#define AUDIO_BT 0
+#define AUDIO_BT 1
 #endif
 
 /* Fons que es fa servir a la pantalla de prova de la mascota. */

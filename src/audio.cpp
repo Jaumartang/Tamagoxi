@@ -5,15 +5,16 @@
 #include <driver/i2s.h>
 #include <math.h>
 
+#include "tg_config.h"
+#include "net.h"
+#include "pins.h"
+
 #include "AudioTools.h"
 #include "AudioTools/AudioCodecs/CodecMP3Helix.h"
 #include "AudioTools/AudioCodecs/CodecWAV.h"
 #if AUDIO_BT
 #include "AudioTools/Communication/A2DPStream.h"
 #endif
-
-#include "tg_config.h"
-#include "pins.h"
 
 namespace {
 
@@ -249,11 +250,27 @@ bool btBeginSink()
     if (gBtStarted) {
         return true;
     }
+
+    /* La radio no pot fer WiFi i Bluetooth alhora: aturem el WiFi per alliberar
+     * la seva memoria abans d'encendre el Bluetooth. */
+    Net::setEnabled(false);
+    vTaskDelay(400 / portTICK_PERIOD_MS);
+
+    const uint32_t freeHeap = ESP.getFreeHeap();
+    if (freeHeap < 90000) {
+        Serial.printf("[BT] memoria insuficient (%u kB lliures, en calen ~90): "
+                      "no encenc el Bluetooth\n",
+                      static_cast<unsigned>(freeHeap / 1024));
+        Net::setEnabled(true);
+        return false;
+    }
+
     auto cfg = gA2dp.defaultConfig(audio_tools::RX_MODE);
     cfg.name  = "Tamagoxi";
     cfg.wait_for_connection = false;
     if (!gA2dp.begin(cfg)) {
         Serial.println(F("[BT] no s'ha pogut iniciar l'altaveu Bluetooth"));
+        Net::setEnabled(true);
         return false;
     }
     gBtStarted = true;
@@ -743,6 +760,9 @@ void btSetMode(BtMode mode)
         return;
     }
     gBtMode = mode;
+    if (mode == BtMode::Off) {
+        Net::setEnabled(true);      /* el WiFi pot tornar */
+    }
     Serial.printf("[BT] mode -> %s\n",
                   (mode == BtMode::Sink) ? "altaveu (sink: el mobil hi envia musica)"
                                          : ((mode == BtMode::Source) ? "emissor" : "apagat"));

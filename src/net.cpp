@@ -32,6 +32,7 @@ volatile Net::State gState       = Net::State::NoCredentials;
 volatile bool       gTimeSynced  = false;
 volatile uint32_t   gEpoch       = 0;
 volatile bool       gRefresh     = false;
+volatile bool       gEnabled     = true;
 volatile uint32_t   gWeatherMs   = 0;      /* millis() de les dades valides */
 uint32_t            gLastTryMs   = 0;
 
@@ -345,6 +346,17 @@ void netTask(void*)
             doScan();
         }
 
+        if (!gEnabled) {
+            if (WiFi.status() == WL_CONNECTED || WiFi.getMode() != WIFI_OFF) {
+                WiFi.disconnect(true);
+                WiFi.mode(WIFI_OFF);
+                gState = Net::State::NoCredentials;
+                Serial.println(F("[NET] WiFi aturat (el Bluetooth el necessita)"));
+            }
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            continue;
+        }
+
         if (WiFi.status() != WL_CONNECTED) {
             if (!connectWifi()) {
                 gTimeSynced = false;
@@ -536,6 +548,23 @@ float longitude()
 void requestRefresh()
 {
     gRefresh = true;
+}
+
+void setEnabled(bool on)
+{
+    if (on == gEnabled) {
+        return;
+    }
+    gEnabled = on;
+    Serial.printf("[NET] WiFi %s\n", on ? "activat" : "desactivat");
+    if (gTask != nullptr) {
+        xTaskNotifyGive(gTask);
+    }
+}
+
+bool enabled()
+{
+    return gEnabled;
 }
 
 void startScan()

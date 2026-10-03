@@ -47,6 +47,11 @@ bool     scanDone();
 uint8_t  scanCount();
 Ap       scanAp(uint8_t index);
 
+/* Activa o desactiva el WiFi. Quan s'encén el Bluetooth cal desactivar-lo: la
+ * radio no pot atendre els dos i el Bluetooth necessita la memoria. */
+void setEnabled(bool on);
+bool enabled();
+
 /* Arrenca la tasca de xarxa. No bloqueja (torna de seguida). */
 void begin();
 
