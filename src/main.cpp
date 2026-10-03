@@ -399,21 +399,6 @@ uint8_t clampAdd(uint8_t value, int delta)
     return static_cast<uint8_t>(v);
 }
 
-/* Hook cridat entre franges mentre la mascota es dibuixa: mostreja el tactil i
- * en reté el primer toc, aixi no es perd cap toc encara que el bucle estigui
- * ocupat pintant. */
-void bandHook()
-{
-    if (Touch::update() && !gTouchLatch) {
-        int16_t lx = 0;
-        int16_t ly = 0;
-        Touch::getCoords(lx, ly);
-        gTouchLatchX = lx;
-        gTouchLatchY = ly;
-        gTouchLatch = true;
-    }
-}
-
 /* Manté la mascota entre el HUD i les barres. */
 void applyHomeLayout()
 {
@@ -469,7 +454,9 @@ void startHome()
     SpriteRenderer::drawFrame();
 
     gMenuOpen = false;
-    SpriteRenderer::setBandHook(bandHook);
+    /* No registrem el hook de franges: llegir el tactil dins la transaccio SPI
+     * del display pot corrompre les dues coses. El tactil es mostreja al bucle. */
+    SpriteRenderer::setBandHook(nullptr);
 
     Ui::invalidate();
     Ui::begin();
@@ -779,6 +766,66 @@ void cmdBaud(char* arg)
     Serial.printf("[CON] baud %lu\n", static_cast<unsigned long>(b));
 }
 
+/* Monitor del tactil: mostra la pressio crua (z) i les coordenades mentre dura,
+ * per diagnosticar si el panell detecta el dit i com es mapeja. */
+void cmdTouchMon(char* arg)
+{
+    int secs = (arg != nullptr) ? atoi(arg) : 15;
+    if (secs <= 0 || secs > 120) {
+        secs = 15;
+    }
+
+    TFT_eSPI& t = Display::driver();
+    const uint16_t thr = Touch::pressureThreshold();
+    Serial.printf("[TOUCH] monitor %d s (llindar z=%u). TOCA LA PANTALLA ARA!\n",
+                  secs, static_cast<unsigned>(thr));
+
+    const uint32_t end = millis() + static_cast<uint32_t>(secs) * 1000u;
+    uint32_t lastBeat = 0;
+    uint32_t lastPrint = 0;
+    uint16_t maxZ = 0;
+    uint32_t detected = 0;
+
+    while (static_cast<int32_t>(millis() - end) < 0) {
+        Touch::update();   /* refresca l'estat intern (gX/gY) */
+        const uint16_t z = t.getTouchRawZ();
+        uint16_t rx = 0;
+        uint16_t ry = 0;
+        t.getTouchRaw(&rx, &ry);
+        if (z > maxZ) {
+            maxZ = z;
+        }
+        if (z >= thr) {
+            ++detected;
+            if (millis() - lastPrint >= 120) {
+                lastPrint = millis();
+                int16_t mx = -1;
+                int16_t my = -1;
+                Touch::getCoords(mx, my);
+                Serial.printf("[TOUCH] TOC z=%4u raw=(%4u,%4u) map=(%d,%d)\n",
+                              static_cast<unsigned>(z), static_cast<unsigned>(rx),
+                              static_cast<unsigned>(ry), mx, my);
+            }
+        } else if (millis() - lastBeat >= 2000) {
+            lastBeat = millis();
+            Serial.printf("[TOUCH] repos z=%4u raw=(%4u,%4u)\n",
+                          static_cast<unsigned>(z), static_cast<unsigned>(rx),
+                          static_cast<unsigned>(ry));
+        }
+        delay(5);
+    }
+
+    Serial.printf("[TOUCH] fi: z max=%u, mostres>=llindar=%lu\n",
+                  static_cast<unsigned>(maxZ), static_cast<unsigned long>(detected));
+    if (detected == 0) {
+        const uint16_t suggest = (maxZ > 20) ? static_cast<uint16_t>(maxZ * 2 / 3) : 60;
+        Serial.printf("[TOUCH] CAP TOC. El panell pot respondre amb menys pressio: "
+                      "prova 'tth %u'\n", static_cast<unsigned>(suggest));
+    } else {
+        Serial.println(F("[TOUCH] OK: el panell detecta el dit."));
+    }
+}
+
 /* --- Consola serie -------------------------------------------------------- */
 void printHelp()
 {
@@ -786,7 +833,7 @@ void printHelp()
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
                      "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
-                     "| shot [x y w h] | baud <n>"));
+                     "| shot [x y w h] | baud <n> | tmon [s]"));
 }
 
 void printInfo()
@@ -974,6 +1021,8 @@ void handleCommand(char* cmd)
         cmdShot(arg);
     } else if (strcmp(cmd, "baud") == 0) {
         cmdBaud(arg);
+    } else if (strcmp(cmd, "tmon") == 0) {
+        cmdTouchMon(arg);
     } else if (strcmp(cmd, "tth") == 0) {
         if (arg != nullptr) {
             Touch::setPressureThreshold(static_cast<uint16_t>(atoi(arg)));
@@ -1003,19 +1052,6 @@ void pollSerial()
     }
 }
 
-/* Comprova que hi ha tactil, esperant com a maxim timeoutMs (mai pengem). */
-bool waitForTouch(uint32_t timeoutMs)
-{
-    const uint32_t t0 = millis();
-    while (millis() - t0 < timeoutMs) {
-        if (Touch::isPressed()) {
-            return true;
-        }
-        delay(20);
-    }
-    return false;
-}
-
 }  // namespace
 
 void setup()
@@ -1036,25 +1072,30 @@ void setup()
     Led::begin();
     Touch::init();
 
-    /* Primera arrencada sense calibratge: demanem un toc i calibrem. */
+    /* El tactil funciona amb un mapa per defecte; la calibracio fina es fa amb
+     * la comanda 'cal' o amb una premuda llarga al rellotge. */
     if (!Touch::isCalibrated()) {
-        Display::driver().fillScreen(TFT_BLACK);
-        Display::driver().setTextDatum(MC_DATUM);
-        Display::driver().setTextColor(TFT_WHITE, TFT_BLACK);
-        Display::driver().setTextFont(4);
-        Display::driver().drawString("Toca la pantalla", SCREEN_W / 2, SCREEN_H / 2 - 20);
-        Display::driver().drawString("per calibrar", SCREEN_W / 2, SCREEN_H / 2 + 20);
-        Serial.println(F("[Touch] Toca la pantalla per calibrar (15 s d'espera)"));
-        if (waitForTouch(15000)) {
-            delay(300);  /* que l'usuari aixequi el dit abans de calibrar */
-            Touch::calibrate();
-        } else {
-            Serial.println(F("[Touch] sense resposta: segueixo sense calibrar ('cal')"));
-        }
+        Serial.println(F("[Touch] sense calibracio d'usuari: es fa servir el mapa per defecte"));
     }
 
     if (BL_DIAG_ON_BOOT) {
         runBacklightDiagnostic();
+    }
+
+    if (TOUCH_DIAG_ON_BOOT) {
+        TFT_eSPI& t = Display::driver();
+        t.fillScreen(TFT_BLACK);
+        t.setTextDatum(MC_DATUM);
+        t.setTextColor(TFT_WHITE, TFT_BLACK);
+        t.setTextFont(4);
+        t.drawString("DIAGNOSTIC TACTIL", SCREEN_W / 2, 150);
+        t.setTextColor(TFT_YELLOW, TFT_BLACK);
+        t.drawString("Toca la pantalla", SCREEN_W / 2, 230);
+        t.drawString("uns quants cops", SCREEN_W / 2, 270);
+        delay(1500);
+        char secs[8];
+        snprintf(secs, sizeof(secs), "%d", TOUCH_DIAG_SECONDS);
+        cmdTouchMon(secs);
     }
 
     Serial.println(F("[SD] escanejant la targeta..."));

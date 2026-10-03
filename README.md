@@ -7,7 +7,17 @@ lògica del joc.
 
 > Estat actual: **Fase 4** — tàctil calibrat, HUD, barres i 4 botons grans.
 
-## Pantalla principal (Fase 4)
+## Tàctil (calibració)
+
+El tàctil (XPT2046) fa servir un **mapa cru→píxels propi** (lineal, amb la Y
+invertida tal com és en aquesta placa) i porta un **mapa per defecte ja bo**:
+funciona des del primer moment, sense calibrar.
+
+- Calibratge fi: comanda **`cal`** (4 objectius) o **premuda llarga (2 s) al
+  rellotge** del HUD. Es desa a la NVS.
+- El llindar de pressió és ajustable en calent: `tth <n>` (per defecte 400; el
+  panell dóna 400–2500 en tocar).
+- Diagnòstic: `tmon [s]` mostra la pressió crua i les coordenades mentre es toca.
 
 ```
 y 0..40    HUD: hora · icona/temperatura · WiFi

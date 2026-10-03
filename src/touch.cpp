@@ -11,14 +11,18 @@ namespace {
 
 /* NVS (Preferences): l'espai de noms admet 15 caracters com a maxim. */
 constexpr const char* kPrefsNamespace = "tg_touch";
-constexpr uint16_t kCalibrationMagic = 0xC0DE;  /* marca de calibratge valid */
+constexpr uint16_t kCalibrationMagic = 0x7A11;  /* marca de calibracio propia */
 
-/* TFT_eSPI descriu el calibratge amb 5 valors: x0, x1 (delta), y0, y1 (delta)
- * i un byte de bits: rotate | (invert_x << 1) | (invert_y << 2). */
-constexpr size_t kCalibrationValues = 5;
+/* Rang cru per defecte (mesurat en aquesta placa). Nota: l'eix Y va INVERTIT
+ * (tocar a dalt dona un valor cru mes gran). Aixi el tactil ja funciona sense
+ * calibrar; la calibracio fina el sobreescriu. */
+constexpr int32_t kDefXmin = 300;
+constexpr int32_t kDefXmax = 3480;
+constexpr int32_t kDefYmin = 3800;
+constexpr int32_t kDefYmax = 420;
 
 bool gReady = false;
-bool gCalibrated = false;
+bool gCalibrated = false;      /* hi ha calibracio desada (diferent del defecte) */
 bool gPressed = false;
 int16_t gX = 0;
 int16_t gY = 0;
@@ -26,21 +30,24 @@ bool gHasRawSample = false;
 uint16_t gLastRawX = 0;
 uint16_t gLastRawY = 0;
 uint32_t gLastReadMs = 0;
-uint16_t gCalibration[kCalibrationValues] = {0, 0, 0, 0, 0};
 uint16_t gPressureThreshold = TOUCH_DEFAULT_PRESSURE;
+
+int32_t gXmin = kDefXmin;
+int32_t gXmax = kDefXmax;
+int32_t gYmin = kDefYmin;
+int32_t gYmax = kDefYmax;
 
 void loadCalibration()
 {
     Preferences prefs;
     if (!prefs.begin(kPrefsNamespace, /*readOnly=*/true)) {
-        return;  /* encara no hi ha res desat */
+        return;
     }
     if (prefs.getUShort("magic", 0) == kCalibrationMagic) {
-        gCalibration[0] = prefs.getUShort("x0", 0);
-        gCalibration[1] = prefs.getUShort("x1", 0);
-        gCalibration[2] = prefs.getUShort("y0", 0);
-        gCalibration[3] = prefs.getUShort("y1", 0);
-        gCalibration[4] = prefs.getUShort("flags", 0);
+        gXmin = prefs.getInt("xmin", kDefXmin);
+        gXmax = prefs.getInt("xmax", kDefXmax);
+        gYmin = prefs.getInt("ymin", kDefYmin);
+        gYmax = prefs.getInt("ymax", kDefYmax);
         gCalibrated = true;
     }
     prefs.end();
@@ -54,12 +61,82 @@ void saveCalibration()
         return;
     }
     prefs.putUShort("magic", kCalibrationMagic);
-    prefs.putUShort("x0", gCalibration[0]);
-    prefs.putUShort("x1", gCalibration[1]);
-    prefs.putUShort("y0", gCalibration[2]);
-    prefs.putUShort("y1", gCalibration[3]);
-    prefs.putUShort("flags", gCalibration[4]);
+    prefs.putInt("xmin", gXmin);
+    prefs.putInt("xmax", gXmax);
+    prefs.putInt("ymin", gYmin);
+    prefs.putInt("ymax", gYmax);
     prefs.end();
+}
+
+/* Mapa lineal cru -> pixels de pantalla (amb acotament). */
+void mapToScreen(uint16_t rawX, uint16_t rawY, int16_t& sx, int16_t& sy)
+{
+    const int32_t dx = gXmax - gXmin;
+    const int32_t dy = gYmax - gYmin;
+    int32_t x = (dx != 0) ? ((static_cast<int32_t>(rawX) - gXmin) * (SCREEN_W - 1)) / dx : 0;
+    int32_t y = (dy != 0) ? ((static_cast<int32_t>(rawY) - gYmin) * (SCREEN_H - 1)) / dy : 0;
+    if (x < 0) { x = 0; }
+    if (x > SCREEN_W - 1) { x = SCREEN_W - 1; }
+    if (y < 0) { y = 0; }
+    if (y > SCREEN_H - 1) { y = SCREEN_H - 1; }
+    sx = static_cast<int16_t>(x);
+    sy = static_cast<int16_t>(y);
+}
+
+void drawTarget(int x, int y)
+{
+    TFT_eSPI& t = Display::driver();
+    t.drawCircle(x, y, 16, TFT_WHITE);
+    t.fillCircle(x, y, 9, TFT_RED);
+    t.drawFastHLine(x - 28, y, 56, TFT_WHITE);
+    t.drawFastVLine(x, y - 28, 56, TFT_WHITE);
+}
+
+/* Espera un toc i en retorna el valor cru mig (per al calibratge). */
+bool waitRawTouch(int16_t& rx, int16_t& ry, uint32_t timeoutMs)
+{
+    TFT_eSPI& tft = Display::driver();
+
+    uint32_t t0 = millis();
+    while ((millis() - t0) < timeoutMs) {
+        if (tft.getTouchRawZ() >= gPressureThreshold) {
+            break;
+        }
+        delay(10);
+    }
+    if ((millis() - t0) >= timeoutMs) {
+        return false;
+    }
+
+    int32_t sx = 0;
+    int32_t sy = 0;
+    int n = 0;
+    t0 = millis();
+    while ((millis() - t0) < 1500) {
+        if (tft.getTouchRawZ() >= gPressureThreshold) {
+            uint16_t x = 0;
+            uint16_t y = 0;
+            tft.getTouchRaw(&x, &y);
+            sx += x;
+            sy += y;
+            ++n;
+        } else if (n >= 3) {
+            break;  /* el dit ja s'ha aixecat */
+        }
+        delay(10);
+    }
+    if (n == 0) {
+        return false;
+    }
+    rx = static_cast<int16_t>(sx / n);
+    ry = static_cast<int16_t>(sy / n);
+
+    /* Espera que s'aixequi el dit abans del seguent objectiu. */
+    t0 = millis();
+    while ((millis() - t0) < 2000 && tft.getTouchRawZ() >= gPressureThreshold) {
+        delay(10);
+    }
+    return true;
 }
 
 /* Una lectura del panell. Vegeu la nota de touch.h sobre per que no es fa
@@ -89,20 +166,11 @@ void readPanel()
     gHasRawSample = true;
 
     if (!gCalibrated) {
-        /* Sense calibratge no podem mapejar a pixels, pero si que hi ha dit. */
-        gX = -1;
-        gY = -1;
-        gPressed = true;
-        return;
+        /* Sense calibratge fem servir el mapa per defecte (mesurat): el tactil
+         * funciona igualment. */
     }
 
-    tft.convertRawXY(&rawX, &rawY);
-    if (rawX >= Display::width() || rawY >= Display::height()) {
-        return;  /* fora de pantalla: no es un toc valid */
-    }
-
-    gX = static_cast<int16_t>(rawX);
-    gY = static_cast<int16_t>(rawY);
+    mapToScreen(rawX, rawY, gX, gY);
     gPressed = true;
 }
 
@@ -117,11 +185,10 @@ void init()
     }
 
     loadCalibration();
-    if (gCalibrated) {
-        Display::driver().setTouch(gCalibration);
-    } else {
-        Serial.println(F("[Touch] Sense calibratge desat: cal calibrar un cop per placa"));
-    }
+    Serial.printf("[Touch] mapa cru->pixels: x[%ld..%ld] y[%ld..%ld] (%s)\n",
+                  static_cast<long>(gXmin), static_cast<long>(gXmax),
+                  static_cast<long>(gYmin), static_cast<long>(gYmax),
+                  gCalibrated ? "calibrat per l'usuari" : "per defecte");
 
     gReady = true;
     Serial.printf("[Touch] XPT2046 a punt (llindar z=%u, %s)\n",
@@ -189,18 +256,54 @@ void calibrate()
         return;
     }
 
-    Serial.println(F("[Touch] Calibratge: toca les 4 fletxes que aniran sortint "
-                     "(dalt-esquerra, baix-esquerra, dalt-dreta, baix-dreta)"));
-    Display::driver().calibrateTouch(gCalibration, TFT_WHITE, TFT_BLACK, 15);
+    TFT_eSPI& t = Display::driver();
+    const int m = 24;
+    const int tx[4] = {m, SCREEN_W - 1 - m, m, SCREEN_W - 1 - m};
+    const int ty[4] = {m, m, SCREEN_H - 1 - m, SCREEN_H - 1 - m};
+    static const char* const ord[4] = {
+        "1/4  dalt-esquerra", "2/4  dalt-dreta",
+        "3/4  baix-esquerra", "4/4  baix-dreta"};
+    int16_t rx[4] = {0, 0, 0, 0};
+    int16_t ry[4] = {0, 0, 0, 0};
+
+    for (int i = 0; i < 4; ++i) {
+        t.fillScreen(TFT_BLACK);
+        t.setTextDatum(TC_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(TFT_WHITE, TFT_BLACK);
+        t.drawString("CALIBRACIO DEL TACTIL", SCREEN_W / 2, 8);
+        t.setTextColor(TFT_YELLOW, TFT_BLACK);
+        t.drawString("Toca el cercle vermell", SCREEN_W / 2, SCREEN_H / 2 - 34);
+        t.setTextColor(TFT_WHITE, TFT_BLACK);
+        t.drawString(ord[i], SCREEN_W / 2, SCREEN_H / 2 + 2);
+        drawTarget(tx[i], ty[i]);
+
+        Serial.printf("[Touch] calibracio: toca %s\n", ord[i]);
+        if (!waitRawTouch(rx[i], ry[i], 20000)) {
+            Serial.println(F("[Touch] calibracio cancel.lada (no s'ha detectat el toc)"));
+            t.fillScreen(TFT_BLACK);
+            return;
+        }
+        Serial.printf("[Touch]   raw=(%d,%d)\n", static_cast<int>(rx[i]), static_cast<int>(ry[i]));
+    }
+
+    gXmin = (static_cast<int32_t>(rx[0]) + rx[2]) / 2;
+    gXmax = (static_cast<int32_t>(rx[1]) + rx[3]) / 2;
+    gYmin = (static_cast<int32_t>(ry[0]) + ry[1]) / 2;
+    gYmax = (static_cast<int32_t>(ry[2]) + ry[3]) / 2;
+
+    if (gXmax == gXmin || gYmax == gYmin) {
+        Serial.println(F("[Touch] calibracio invalida (punts coincidents); no es desa"));
+        t.fillScreen(TFT_BLACK);
+        return;
+    }
+
     saveCalibration();
     gCalibrated = true;
-
-    Serial.printf("[Touch] Calibratge desat a la NVS: x0=%u x1=%u y0=%u y1=%u flags=%u\n",
-                  static_cast<unsigned>(gCalibration[0]),
-                  static_cast<unsigned>(gCalibration[1]),
-                  static_cast<unsigned>(gCalibration[2]),
-                  static_cast<unsigned>(gCalibration[3]),
-                  static_cast<unsigned>(gCalibration[4]));
+    Serial.printf("[Touch] calibracio nova OK: x[%ld..%ld] y[%ld..%ld]\n",
+                  static_cast<long>(gXmin), static_cast<long>(gXmax),
+                  static_cast<long>(gYmin), static_cast<long>(gYmax));
+    t.fillScreen(TFT_BLACK);
 }
 
 void setPressureThreshold(uint16_t threshold)
