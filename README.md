@@ -19,22 +19,25 @@ funciona des del primer moment, sense calibrar.
   panell dóna 400–2500 en tocar).
 - Diagnòstic: `tmon [s]` mostra la pressió crua i les coordenades mentre es toca.
 
+## Pantalla principal (Fase 4)
+
 ```
 y 0..40    HUD: hora · icona/temperatura · WiFi
 y 44..300  MASCOTA (256×256)         <- només la toca SpriteRenderer
-y 304..356 panell de barres: gana · felicitat · energia · salut
-y 420..476 boto ≡ MENU
+y 300..480 ZONA INFERIOR:
+             · panell de barres (esquerra): gana · felicitat · energia · salut
+             · boto ≡ MENU (dreta)
 ```
 
 - El **HUD** i les **barres** es repinten només quan canvia alguna cosa.
-- El boto **MENU** obre un **desplegable** (y 304..480) amb 4 accions grans:
-  **Menjar · Jugar · Dormir/Despertar · Curar** (i ✕ per tancar). La mascota
-  continua animant-se mentre el menú és obert.
+- El botó **MENU** obre un **desplegable** que **tapa tota la zona inferior** amb
+  4 accions grans: **Menjar · Jugar · Dormir/Despertar · Curar**, una ✕ per
+  tancar i una **franja de barres compactes** a sota (per veure l'estat sense
+  sortir del menú). La mascota continua animant-se mentre el menú és obert.
+- Al **tancar** el menú es repinten les barres i el botó (la zona queda neta).
 - **Tocar la mascota** = carícia (anim `HAPPY` + cor, amb cooldown).
-- **Premuda llarga (2 s) al rellotge** = tornar a **calibrar el tàctil**.
+- **Premuda llarga (2 s) al rellotge** = calibrar el tàctil.
 - El rellotge mostra l'**uptime** com a marcador fins que el NTP arribi a la Fase 6.
-- El tàctil es mostreja **entre franges** mentre es dibuixa la mascota, perquè
-  no es perdi cap toc encara que la pantalla estigui ocupada.
 
 ## Rendiment (mesurat)
 
