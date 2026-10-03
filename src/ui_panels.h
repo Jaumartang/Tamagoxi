@@ -6,10 +6,12 @@
  * ui_panels.h - Menus i panells modals (Fase 6.5).
  *
  *   TopMenu  - desplegable que baixa de la barra de dalt (boto de ratlles del
- *              HUD): WiFi · Jocs · Ajustos · Sobre.
+ *              HUD): WiFi · Musica · Bluetooth · Jocs · Ajustos · Sobre.
  *   Wifi     - panell a pantalla completa: estat de la connexio, llista de
  *              xarxes trobades (senyal, cadenat) i teclat en pantalla per
  *              escriure la contrasenya.
+ *   Bluetooth- encendre el so pels auriculars (emissor) o fer d'altaveu, i
+ *              apagar-lo. Tambe es pot triar si el so surt per la placa.
  *   Settings - tema, fons i brillantor.
  *   About    - informacio del sistema.
  *   Games    - jocs (encara per fer).
@@ -21,7 +23,7 @@
 
 namespace Panels {
 
-enum class Id : uint8_t { None, TopMenu, Wifi, Music, Settings, About, Games };
+enum class Id : uint8_t { None, TopMenu, Wifi, Music, Bluetooth, Settings, About, Games };
 
 /* Callbacks que main registra perque els panells puguin aplicar canvis. */
 struct Hooks {

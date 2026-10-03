@@ -34,7 +34,7 @@ constexpr int kMenuY = UI_HUD_H;
 constexpr int kMenuW = 208;
 constexpr int kRowH  = 44;
 constexpr int kRowGap = 4;
-constexpr int kMenuRows = 5;
+constexpr int kMenuRows = 6;
 constexpr int kMenuH = 4 + kMenuRows * kRowH + (kMenuRows - 1) * kRowGap + 4;   /* 244 */
 
 /* --- Panell de musica ------------------------------------------------------ */
@@ -184,7 +184,12 @@ void drawButton(int x, int y, int w, int h, const char* label, uint16_t col,
 {
     TFT_eSPI& t = tft();
     const uint16_t c = pressed ? kText : col;
-    const uint16_t tc = pressed ? col : kText;
+    /* Text clar o fosc segons com de clar es el fons, perque sempre es llegeixi. */
+    const uint16_t r = static_cast<uint16_t>(((c >> 11) & 0x1F) * 255 / 31);
+    const uint16_t g = static_cast<uint16_t>(((c >> 5) & 0x3F) * 255 / 63);
+    const uint16_t b = static_cast<uint16_t>((c & 0x1F) * 255 / 31);
+    const uint16_t lum = static_cast<uint16_t>((r * 299 + g * 587 + b * 114) / 1000);
+    const uint16_t tc = pressed ? col : ((lum > 120) ? TFT_BLACK : kText);
     t.fillRoundRect(x, y, w, h, 8, c);
     t.drawRoundRect(x, y, w, h, 8, Ui::colorPanelEdge());
     t.setTextDatum(MC_DATUM);
@@ -244,10 +249,23 @@ void iconInfo(int cx, int cy)
     t.fillRect(cx - 1, cy - 1, 3, 7, kText);
 }
 
+/* Runa del Bluetooth (barra central + dues diagonals). */
+void iconBluetooth(int cx, int cy)
+{
+    TFT_eSPI& t = tft();
+    constexpr int h = 8;
+    constexpr int d = 5;
+    t.drawLine(cx, cy - h, cx, cy + h, kText);
+    t.drawLine(cx - d, cy - d, cx + d, cy + d, kText);
+    t.drawLine(cx - d, cy + d, cx + d, cy - d, kText);
+}
+
 /* --- Declaracions dels panells -------------------------------------------- */
 
 void showWifi();
 void showMusic();
+void showBluetooth();
+void drawBluetooth();
 void drawMusic();
 void showSettings();
 void showAbout();
@@ -271,7 +289,7 @@ void drawTopMenu()
     t.fillRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelBg());
     t.drawRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelEdge());
 
-    const char* labels[kMenuRows] = {"WiFi", "Musica", "Jocs", "Ajustos", "Sobre"};
+    const char* labels[kMenuRows] = {"WiFi", "Musica", "Bluetooth", "Jocs", "Ajustos", "Sobre"};
     for (int i = 0; i < kMenuRows; ++i) {
         const int x = kMenuX + 4;
         const int y = kMenuY + 4 + i * (kRowH + kRowGap);
@@ -284,23 +302,34 @@ void drawTopMenu()
         switch (i) {
             case 0: iconWifi(icx, icy, Net::connected()); break;
             case 1: iconMusic(icx, icy); break;
-            case 2: iconGame(icx, icy); break;
-            case 3: iconSliders(icx, icy); break;
+            case 2: iconBluetooth(icx, icy); break;
+            case 3: iconGame(icx, icy); break;
+            case 4: iconSliders(icx, icy); break;
             default: iconInfo(icx, icy); break;
+        }
+
+        /* Segona linia d'estat (WiFi i Bluetooth). */
+        const char* sub = nullptr;
+        if (i == 0) {
+            sub = Net::connected() ? "connectat"
+                                   : (Net::hasCredentials() ? "desconnectat" : "sense configurar");
+        } else if (i == 2) {
+            switch (Audio::btMode()) {
+                case Audio::BtMode::Source: sub = "auriculars"; break;
+                case Audio::BtMode::Sink:   sub = "altaveu";    break;
+                default:                    sub = "apagat";     break;
+            }
         }
 
         t.setTextDatum(ML_DATUM);
         t.setTextFont(2);
         t.setTextColor(kText, col);
-        t.drawString(labels[i], x + 46, (i == 0) ? (icy - 7) : icy);
+        t.drawString(labels[i], x + 46, (sub != nullptr) ? (icy - 7) : icy);
 
-        if (i == 0) {
-            const char* st = Net::connected()
-                                 ? "connectat"
-                                 : (Net::hasCredentials() ? "desconnectat" : "sense configurar");
+        if (sub != nullptr) {
             t.setTextFont(1);
             t.setTextColor(kText, col);
-            t.drawString(st, x + 46, icy + 9);
+            t.drawString(sub, x + 46, icy + 9);
         }
     }
 }
@@ -758,6 +787,87 @@ void drawAbout()
     drawButton(8, 410, 304, 60, "Tanca", Ui::colorClose());
 }
 
+/* --- Panell de Bluetooth --------------------------------------------------- */
+
+constexpr int kBtBtnY1 = 310;
+constexpr int kBtBtnY2 = 380;
+constexpr int kBtBtnH  = 62;
+
+void drawBluetooth()
+{
+    TFT_eSPI& t = tft();
+    t.fillRect(0, 0, SCREEN_W, SCREEN_H, Ui::colorPanelBg());
+    drawTitleBar("Bluetooth");
+
+    const Audio::BtMode mode = Audio::btMode();
+    const bool on = (mode != Audio::BtMode::Off);
+    const bool btOut = (Audio::output() == Audio::Output::Bluetooth);
+
+    t.setTextDatum(ML_DATUM);
+    int y = 58;
+
+    t.setTextFont(4);
+    t.setTextColor(kText, Ui::colorPanelBg());
+    t.drawString((mode == Audio::BtMode::Source) ? "Auriculars"
+                 : ((mode == Audio::BtMode::Sink) ? "Altaveu" : "Apagat"),
+                 12, y);
+    y += 34;
+
+    struct Line { const char* label; char value[44]; };
+    Line lines[5];
+    int n = 0;
+
+    snprintf(lines[n].value, sizeof(lines[n].value), "%s",
+             on ? (Audio::btConnected() ? "si" : "esperant connexio") : "-");
+    lines[n++].label = "Connectat";
+    snprintf(lines[n].value, sizeof(lines[n].value), "%s", Audio::btName());
+    lines[n++].label = "Nom";
+    snprintf(lines[n].value, sizeof(lines[n].value), "%s",
+             btOut ? "Bluetooth" : "placa (GPIO26)");
+    lines[n++].label = "Sortida";
+    snprintf(lines[n].value, sizeof(lines[n].value), "%s",
+             Audio::isPlaying() ? "sonant" : "-");
+    lines[n++].label = "Musica";
+    snprintf(lines[n].value, sizeof(lines[n].value), "%u kB lliures",
+             static_cast<unsigned>(ESP.getFreeHeap() / 1024));
+    lines[n++].label = "Memoria";
+
+    t.setTextFont(2);
+    for (int i = 0; i < n; ++i) {
+        t.setTextColor(kDimText, Ui::colorPanelBg());
+        t.drawString(lines[i].label, 12, y + 8);
+        t.setTextColor(kText, Ui::colorPanelBg());
+        t.setTextDatum(MR_DATUM);
+        t.drawString(lines[i].value, SCREEN_W - 12, y + 8);
+        t.setTextDatum(ML_DATUM);
+        y += 26;
+    }
+
+    /* Nota: que passa quan s'encen o s'apaga. */
+    const int ny = y + 8;
+    t.fillRoundRect(8, ny, SCREEN_W - 16, 62, 10, Ui::colorTrack());
+    t.setTextFont(1);
+    t.setTextColor(kText, Ui::colorTrack());
+    if (on) {
+        t.drawString("Mentre dura, la mascota dorm i el WiFi s'atura", 16, ny + 14);
+        t.drawString("(aquest xip va just de memoria).", 16, ny + 30);
+        t.drawString("Apagar-lo reinicia la placa: tot torna en 3 s.", 16, ny + 46);
+    } else {
+        t.drawString("Per sentir la musica als teus auriculars:", 16, ny + 14);
+        t.drawString("1. Encen \"Auriculars\" aqui.", 16, ny + 30);
+        t.drawString("2. Emparella \"Tamagoxi\" al mobil.", 16, ny + 46);
+    }
+
+    /* Botons. */
+    drawButton(8, kBtBtnY1, 148, kBtBtnH, "Auriculars",
+               (mode == Audio::BtMode::Source) ? kGood : Ui::colorRow(1));
+    drawButton(164, kBtBtnY1, 148, kBtBtnH, "Altaveu",
+               (mode == Audio::BtMode::Sink) ? kGood : Ui::colorRow(2));
+    drawButton(8, kBtBtnY2, 148, kBtBtnH, on ? "Apagar" : "So a la placa",
+               on ? Ui::colorClose() : Ui::colorRow(3));
+    drawButton(164, kBtBtnY2, 148, kBtBtnH, "Tanca", Ui::colorClose());
+}
+
 void drawGames()
 {
     TFT_eSPI& t = tft();
@@ -1086,6 +1196,7 @@ const char* name(Id id)
         case Id::TopMenu:  return "menu";
         case Id::Wifi:     return "wifi";
         case Id::Music:    return "musica";
+        case Id::Bluetooth: return "bluetooth";
         case Id::Settings: return "ajustos";
         case Id::About:    return "sobre";
         case Id::Games:    return "jocs";
@@ -1132,6 +1243,14 @@ void showAbout()
     drawAbout();
 }
 
+void showBluetooth()
+{
+    gId  = Id::Bluetooth;
+    gTimer = millis();
+    Serial.println(F("[UI] panell de Bluetooth"));
+    drawBluetooth();
+}
+
 void showGames()
 {
     gId = Id::Games;
@@ -1152,6 +1271,7 @@ void open(Id id)
         case Id::TopMenu:  openTopMenu(); break;
         case Id::Wifi:     showWifi(); break;
         case Id::Music:    showMusic(); break;
+        case Id::Bluetooth: showBluetooth(); break;
         case Id::Settings: showSettings(); break;
         case Id::About:    showAbout(); break;
         case Id::Games:    showGames(); break;
@@ -1178,6 +1298,15 @@ void topMenuRect(int16_t& x, int16_t& y, int16_t& w, int16_t& h)
 
 void update(uint32_t nowMs)
 {
+    if (gId == Id::Bluetooth) {
+        /* Refresca l'estat (connectat, memoria) de tant en tant. */
+        if (nowMs - gTimer >= 2000) {
+            gTimer = nowMs;
+            drawBluetooth();
+        }
+        return;
+    }
+
     if (gId == Id::Music) {
         if (nowMs - gTimer >= 500) {
             gTimer = nowMs;
@@ -1239,14 +1368,49 @@ bool handleTap(int16_t x, int16_t y)
                 switch (i) {
                     case 0: showWifi(); break;
                     case 1: showMusic(); break;
-                    case 2: showGames(); break;
-                    case 3: showSettings(); break;
+                    case 2: showBluetooth(); break;
+                    case 3: showGames(); break;
+                    case 4: showSettings(); break;
                     default: showAbout(); break;
                 }
                 return true;
             }
         }
         return false;               /* fora del desplegable: es tanca */
+    }
+
+    /* --- Bluetooth --- */
+    if (gId == Id::Bluetooth) {
+        if (y >= kBtBtnY1 && y < kBtBtnY1 + kBtBtnH) {
+            if (x >= 8 && x < 156) {          /* auriculars (emissor) */
+                Audio::btSetMode(Audio::BtMode::Source);
+                if (Audio::btMode() == Audio::BtMode::Source) {
+                    Audio::setOutput(Audio::Output::Bluetooth);
+                }
+                drawBluetooth();
+            } else if (x >= 164 && x < 312) { /* altaveu (rebre) */
+                Audio::btSetMode(Audio::BtMode::Sink);
+                if (Audio::btMode() == Audio::BtMode::Sink) {
+                    Audio::setOutput(Audio::Output::Bluetooth);
+                }
+                drawBluetooth();
+            }
+            return true;
+        }
+        if (y >= kBtBtnY2 && y < kBtBtnY2 + kBtBtnH) {
+            if (x >= 8 && x < 156) {
+                if (Audio::btMode() != Audio::BtMode::Off) {
+                    Audio::btSetMode(Audio::BtMode::Off);   /* reinicia la placa */
+                    return true;
+                }
+                Audio::setOutput(Audio::Output::Dac);
+                drawBluetooth();
+            } else if (x >= 164 && x < 312) {
+                return false;            /* Tanca */
+            }
+            return true;
+        }
+        return true;
     }
 
     /* Boto de tancar de la capçalera (panells a pantalla completa). */

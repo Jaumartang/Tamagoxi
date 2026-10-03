@@ -63,6 +63,8 @@ El HUD té un **botó de ratlles** (a la dreta) que obre un desplegable:
 | Opció | Què fa |
 |---|---|
 | **WiFi** | Panell complet de xarxes (vegeu més avall) |
+| **Música** | Reproductor: cançó actual, transport, volum i llista |
+| **Bluetooth** | Encén el so pels **auriculars** (emissor) o fa d'**altaveu**; tria la sortida (placa/Bluetooth) i l'apaga. Explica què passa en encendre'l (la mascota dorm i el WiFi s'atura) |
 | **Jocs** | Properament: llista dels jocs que vindran |
 | **Ajustos** | Tema de colors, fons de la pantalla i quants fons té la targeta |
 | **Sobre** | Xip, memòria, temps encesa, necessitats, WiFi i meteo |
