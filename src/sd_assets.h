@@ -85,6 +85,11 @@ const Pet& pet(uint8_t index);
 /* Comprova que el fitxer te exactament 'expected' bytes. */
 bool fileHasSize(const char* path, uint32_t expected);
 
+/* Llegeix el frame complet 'frame' de l'animacio 'animName' de la mascota
+ * 'petIndex' a 'dst' (ha de tenir width*height*2 bytes). Omple 'error' si falla. */
+bool readPetFrame(uint8_t petIndex, const char* animName, uint8_t frame,
+                  uint8_t* dst, size_t dstBytes, const char** error);
+
 /* Escriu l'arbre de fitxers (recursiu fins a maxDepth) al stream indicat. */
 void printTree(Print& out, const char* path, uint8_t maxDepth);
 

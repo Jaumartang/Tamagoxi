@@ -66,5 +66,13 @@ static constexpr uint16_t BG_BAND_LINES = 24;
 /* Patro de carrega: apagar la retroil-luminacio mentre es pinta el fons, per
  *que no es vegin les franges a mig pintar. */
 static constexpr bool BG_BACKLIGHT_OFF_ON_LOAD = true;
-/* Galeria de la Fase 2: temps entre fons (auto-avenc). */
+/* --- Galeria de la Fase 2: temps entre fons (auto-avenc). */
 static constexpr uint32_t BG_GALLERY_INTERVAL_MS = 5000;
+
+/* --- Mascota (Fase 3) ----------------------------------------------------- */
+/* Fila (y) on comenca el rectangle de la mascota a pantalla. X es centra sol. */
+static constexpr int PET_AREA_TOP = 80;
+/* Galeria d'animacions: temps entre animacio i animacio. */
+static constexpr uint32_t PET_ANIM_SWITCH_MS = 6000;
+/* Fons que es fa servir a la pantalla de prova de la mascota. */
+static constexpr const char* PET_TEST_BG = "weather_00";

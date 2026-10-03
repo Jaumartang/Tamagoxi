@@ -5,12 +5,14 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 2** — fons a pantalla completa per franges, amb galeria.
+> Estat actual: **Fase 3** — mascota 2× animada sobre el fons (streaming).
 
 ## Rendiment (mesurat)
 
 - Fons complet `320×480` (307.200 B) per franges de 24 files: **~271 ms**
   (lectura SD ~204 ms → 1,5 MB/s; push a pantalla ~67 ms → 4,6 MB/s).
+- Frame de la mascota `256×256` (compost amb el fons llegit de la SD, mode
+  **streaming**): **~145 ms → ~6,9 fps** (min 145 / max 146 ms), heap estable.
 - La lectura de la SD és el coll d'ampolla (depèn de la targeta; una targeta
   moderna/Class 10 va més de pressa).
 - Patró de càrrega: mentre es pinta un fons, la retroil·luminació es posa a 0
@@ -93,6 +95,8 @@ En arrencar:
 | `sd` | Remunta la SD, valida i mostra el resum a pantalla |
 | `lssd` | Escriu l'arbre de fitxers de la SD pel sèrie |
 | `bg <name\|next\|N>` | Mostra un fons concret, el següent o el número N |
+| `pet [bg]` | Mostra la mascota animada sobre un fons (per defecte `PET_TEST_BG`) |
+| `anim <NAME\|next>` | Canvia l'animació de la mascota |
 | `bench [name]` | Mesura lectura SD vs push a pantalla d'un fons |
 | `tth <n>` | Llindar de pressió del tàctil (per defecte 400) |
 | `info` | Estat: heap, backlight, tàctil |
@@ -123,8 +127,8 @@ està al `.gitignore` i **no** es puja mai al repositori.
 
 ```
 include/  pins.h (mapa de pins)  tft_setup.h (TFT_eSPI)  config.h  secrets.example.h
-src/      main.cpp  display.*  led.*  touch.*
+src/      main.cpp  display.*  led.*  touch.*  sd_assets.*  bg_renderer.*  sprite_renderer.*
+tools/    validate_sd.py
 ```
 
-Les fases següents hi afegeixen: `sd_assets`, `bg_renderer`, `sprite_renderer`,
-`pet`, `ui`, `weather`, `storage`.
+Les fases següents hi afegeixen: `pet`, `ui`, `weather`, `storage`.

@@ -6,6 +6,7 @@
 #include "led.h"
 #include "pins.h"
 #include "sd_assets.h"
+#include "sprite_renderer.h"
 #include "touch.h"
 
 /*
@@ -48,11 +49,13 @@ uint32_t gSdRetry    = 0;
 
 /* Pantalla activa: galeria de fons / test tactil / estatica (dibuixada per una
  * comanda). El bucle nomes fa el que toca a cada mode. */
-enum class Screen : uint8_t { Gallery, TouchTest, Static };
+enum class Screen : uint8_t { Gallery, TouchTest, PetTest, Static };
 Screen   gScreen = Screen::Static;
 uint8_t  gBgIndex = 0;
 uint32_t gBgTimer = 0;
 bool     gTouchWasPressed = false;
+uint32_t gPetAnimTimer = 0;
+uint32_t gPetOverlayTimer = 0;
 
 char     gLine[CONSOLE_LINE_MAX];
 uint16_t gLineLen = 0;
@@ -294,6 +297,54 @@ void showBackgroundIndex(uint8_t idx)
                   BgRenderer::status().lastOk ? "ok" : "ERROR");
 }
 
+/* --- Prova de la mascota (Fase 3) ----------------------------------------- */
+
+void drawPetOverlay()
+{
+    const SpriteRenderer::Status& s = SpriteRenderer::status();
+    TFT_eSPI& t = Display::driver();
+    t.fillRect(0, 0, SCREEN_W, 22, TFT_BLACK);
+    t.setTextFont(2);
+    t.setTextDatum(TL_DATUM);
+    t.setTextColor(TFT_YELLOW, TFT_BLACK);
+    const uint32_t avg = s.totalFrames ? (s.totalMs / s.totalFrames) : 0;
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%s f%u/%u  %lums avg%lu  fps~%lu",
+             s.anim, static_cast<unsigned>(s.frameIndex + 1), static_cast<unsigned>(s.frameCount),
+             static_cast<unsigned long>(s.lastFrameMs), static_cast<unsigned long>(avg),
+             avg ? static_cast<unsigned long>(1000 / avg) : 0);
+    t.drawString(buf, 4, 3);
+    t.setTextColor(TFT_WHITE, TFT_BLACK);
+}
+
+void startPetTest(const char* bgName)
+{
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    if (bgs.count == 0) {
+        Serial.println(F("[PET] no hi ha fons (falta la SD?)"));
+        return;
+    }
+    if (!SpriteRenderer::begin()) {
+        return;
+    }
+
+    Display::setBacklight(0);
+    BgRenderer::drawFull(bgName);
+    Display::setBacklight(100);
+
+    SpriteRenderer::setBackground(bgName);
+    SpriteRenderer::setAnimation("IDLE");
+    const uint32_t ms = SpriteRenderer::drawFrame();
+
+    gScreen = Screen::PetTest;
+    gPetAnimTimer = millis();
+    gPetOverlayTimer = millis();
+    drawPetOverlay();
+    Serial.printf("[PET] prova: fons=%s anim=%s primer frame %lu ms\n",
+                  bgName, SpriteRenderer::animationName(),
+                  static_cast<unsigned long>(ms));
+}
+
 /* --- Pantalles de la targeta SD ------------------------------------------- */
 
 void drawSdError()
@@ -402,7 +453,8 @@ void drawSdScreen()
 void printHelp()
 {
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
-                     "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N>"));
+                     "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
+                     "| pet [bg] | anim <NAME|next>"));
 }
 
 void printInfo()
@@ -490,6 +542,22 @@ void handleCommand(char* cmd)
             }
         }
         gBgTimer = millis();
+    } else if (strcmp(cmd, "pet") == 0) {
+        startPetTest(arg != nullptr ? arg : PET_TEST_BG);
+    } else if (strcmp(cmd, "anim") == 0) {
+        if (SpriteRenderer::isActive()) {
+            gScreen = Screen::PetTest;
+            if (arg == nullptr || strcmp(arg, "next") == 0) {
+                Serial.printf("[PET] animacio -> %s\n", SpriteRenderer::nextAnimation());
+            } else {
+                SpriteRenderer::setAnimation(arg);
+            }
+            SpriteRenderer::drawFrame();
+            drawPetOverlay();
+            gPetAnimTimer = millis();
+        } else {
+            Serial.println(F("[PET] la mascota no esta activa (fes 'pet' primer)"));
+        }
     } else if (strcmp(cmd, "sd") == 0) {
         gScreen = Screen::Static;
         SdAssets::begin();
@@ -650,6 +718,38 @@ void loop()
         }
         if (pressed) {
             updateInfo();
+        }
+    } else if (gScreen == Screen::PetTest) {
+        if (SpriteRenderer::isActive()) {
+            if (tap) {
+                Serial.printf("[PET] animacio -> %s\n", SpriteRenderer::nextAnimation());
+                SpriteRenderer::drawFrame();
+                gPetAnimTimer = millis();
+            } else {
+                SpriteRenderer::update(millis());
+            }
+
+            if (millis() - gPetAnimTimer >= PET_ANIM_SWITCH_MS) {
+                gPetAnimTimer = millis();
+                Serial.printf("[PET] animacio -> %s\n", SpriteRenderer::nextAnimation());
+                SpriteRenderer::drawFrame();
+            }
+
+            if (millis() - gPetOverlayTimer >= 500) {
+                gPetOverlayTimer = millis();
+                drawPetOverlay();
+                const SpriteRenderer::Status& s = SpriteRenderer::status();
+                const uint32_t avg = s.totalFrames ? (s.totalMs / s.totalFrames) : 0;
+                Serial.printf("[PET] %s f%u/%u last=%lums avg=%lums min=%lu max=%lu n=%lu heap=%u\n",
+                              s.anim, static_cast<unsigned>(s.frameIndex + 1),
+                              static_cast<unsigned>(s.frameCount),
+                              static_cast<unsigned long>(s.lastFrameMs),
+                              static_cast<unsigned long>(avg),
+                              static_cast<unsigned long>(s.minFrameMs),
+                              static_cast<unsigned long>(s.maxFrameMs),
+                              static_cast<unsigned long>(s.totalFrames),
+                              static_cast<unsigned>(ESP.getFreeHeap()));
+            }
         }
     }
 

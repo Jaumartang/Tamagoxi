@@ -339,6 +339,53 @@ bool fileHasSize(const char* path, uint32_t expected)
     return size == expected;
 }
 
+bool readPetFrame(uint8_t petIndex, const char* animName, uint8_t frame,
+                  uint8_t* dst, size_t dstBytes, const char** error)
+{
+    if (petIndex >= gPetCount) {
+        if (error != nullptr) { *error = "mascota no valida"; }
+        return false;
+    }
+    const Pet& p = gPets[petIndex];
+
+    char path[kPathLen];
+    snprintf(path, sizeof(path), "/pets/%s/%s/%02u.bin",
+             p.folder, animName, static_cast<unsigned>(frame));
+
+    const uint32_t need = static_cast<uint32_t>(p.width) * p.height * 2u;
+    if (dstBytes < need) {
+        if (error != nullptr) { *error = "buffer massa petit"; }
+        return false;
+    }
+
+    File f = SD.open(path, FILE_READ);
+    if (!f) {
+        if (error != nullptr) { *error = "frame no trobat"; }
+        return false;
+    }
+    if (static_cast<uint32_t>(f.size()) != need) {
+        f.close();
+        if (error != nullptr) { *error = "mida de frame incorrecta"; }
+        return false;
+    }
+
+    size_t readTotal = 0;
+    while (readTotal < need) {
+        const size_t got = f.read(dst + readTotal, need - readTotal);
+        if (got == 0) {
+            break;
+        }
+        readTotal += got;
+    }
+    f.close();
+
+    if (readTotal != need) {
+        if (error != nullptr) { *error = "lectura incompleta"; }
+        return false;
+    }
+    return true;
+}
+
 static void printDirRecursive(Print& out, File& dir, const char* path,
                               uint8_t depth, uint8_t maxDepth)
 {
