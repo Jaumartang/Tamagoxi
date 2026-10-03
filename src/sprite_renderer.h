@@ -58,6 +58,13 @@ uint8_t scale();
 void setPosition(int16_t x, int16_t y);
 void centerX();
 
+/* Torna a la disposicio per defecte de config.h (mida i posicio). */
+void resetLayout();
+
+/* Mida actual del rectangle de la mascota a pantalla. */
+uint16_t boxWidth();
+uint16_t boxHeight();
+
 /* Canvia d'animacio amb fallback (nom -> IDLE -> primera del manifest). */
 bool setAnimation(const char* name);
 /* Seguent animacio del manifest (circular). Retorna el nom nou. */

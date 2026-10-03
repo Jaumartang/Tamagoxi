@@ -9,6 +9,7 @@
 #include "config.h"
 #include "display.h"
 #include "sd_assets.h"
+#include "storage.h"
 
 namespace {
 
@@ -114,6 +115,16 @@ bool begin()
                   gStatus.x, gStatus.y,
                   static_cast<unsigned>(gStatus.fps),
                   static_cast<unsigned>(pet.animCount));
+
+    /* Si hi ha una disposicio desada a la NVS, mana sobre config.h. */
+    const Storage::PetLayout saved = Storage::loadPetLayout();
+    if (saved.valid) {
+        setScale(saved.scale);
+        setPosition(saved.x, saved.y);
+        Serial.printf("[PET] disposicio carregada de la NVS: x%u a (%d,%d)\n",
+                      static_cast<unsigned>(gScale), gStatus.x, gStatus.y);
+    }
+
     setAnimation("IDLE");
     return true;
 }
@@ -166,6 +177,26 @@ void setPosition(int16_t x, int16_t y)
 void centerX()
 {
     gStatus.x = static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X);
+}
+
+void resetLayout()
+{
+    if (!gStatus.active) {
+        return;
+    }
+    setScale(PET_SCALE);
+    setPosition(static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X),
+                static_cast<int16_t>(PET_AREA_TOP));
+}
+
+uint16_t boxWidth()
+{
+    return gStatus.boxW;
+}
+
+uint16_t boxHeight()
+{
+    return gStatus.boxH;
 }
 
 bool setAnimation(const char* name)

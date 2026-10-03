@@ -7,6 +7,7 @@
 #include "pins.h"
 #include "sd_assets.h"
 #include "sprite_renderer.h"
+#include "storage.h"
 #include "touch.h"
 
 /*
@@ -469,7 +470,8 @@ void printHelp()
 {
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
-                     "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center"));
+                     "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
+                     "| petreset"));
 }
 
 void printInfo()
@@ -578,7 +580,9 @@ void handleCommand(char* cmd)
             SpriteRenderer::setScale(static_cast<uint8_t>(atoi(arg)));
         }
         redrawPetTest();
-        Serial.printf("[PET] scale=%u box=%ux%u pos=(%d,%d)\n",
+        Storage::savePetLayout(SpriteRenderer::status().x, SpriteRenderer::status().y,
+                               SpriteRenderer::scale());
+        Serial.printf("[PET] scale=%u box=%ux%u pos=(%d,%d) [desat]\n",
                       static_cast<unsigned>(SpriteRenderer::scale()),
                       static_cast<unsigned>(SpriteRenderer::status().boxW),
                       static_cast<unsigned>(SpriteRenderer::status().boxH),
@@ -598,10 +602,19 @@ void handleCommand(char* cmd)
             }
         }
         redrawPetTest();
-        Serial.printf("[PET] pos=(%d,%d) box=%ux%u\n",
+        Storage::savePetLayout(SpriteRenderer::status().x, SpriteRenderer::status().y,
+                               SpriteRenderer::scale());
+        Serial.printf("[PET] pos=(%d,%d) box=%ux%u [desat]\n",
                       SpriteRenderer::status().x, SpriteRenderer::status().y,
                       static_cast<unsigned>(SpriteRenderer::status().boxW),
                       static_cast<unsigned>(SpriteRenderer::status().boxH));
+    } else if (strcmp(cmd, "petreset") == 0) {
+        SpriteRenderer::resetLayout();
+        Storage::clearPetLayout();
+        redrawPetTest();
+        Serial.printf("[PET] disposicio per defecte: x%u pos=(%d,%d)\n",
+                      static_cast<unsigned>(SpriteRenderer::scale()),
+                      SpriteRenderer::status().x, SpriteRenderer::status().y);
     } else if (strcmp(cmd, "sd") == 0) {
         gScreen = Screen::Static;
         SdAssets::begin();
