@@ -54,8 +54,9 @@ static constexpr size_t CONSOLE_LINE_MAX = 48;
 
 /* --- Diagnostica de retroil-luminacio a l'arrencada ----------------------- */
 /* Fa un test visible de pin digital (OFF/ON) i despres de PWM (0/25/50/100 %)
- * per confirmar que el backlight respon i amb quina polaritat. */
-static constexpr bool     BL_DIAG_ON_BOOT    = true;
+ * per confirmar que el backlight respon i amb quina polaritat. Desactivat un cop
+ * verificat el maquinari; es pot repetir en calent amb la comanda 'bltest'. */
+static constexpr bool     BL_DIAG_ON_BOOT    = false;
 static constexpr uint32_t BL_DIAG_DIGITAL_MS = 900;
 static constexpr uint32_t BL_DIAG_PWM_MS     = 700;
 
