@@ -4,6 +4,7 @@
 #include "config.h"
 #include "display.h"
 #include "led.h"
+#include "pet.h"
 #include "pins.h"
 #include "sd_assets.h"
 #include "sprite_renderer.h"
@@ -59,17 +60,10 @@ bool     gTouchWasPressed = false;
 uint32_t gPetAnimTimer = 0;
 uint32_t gPetOverlayTimer = 0;
 
-/* --- Provisio de la UI (Fase 4; la Fase 5 ho substitueix pel joc) --------- */
-uint8_t  gHunger = 70;
-uint8_t  gHappiness = 70;
-uint8_t  gEnergy = 70;
-uint8_t  gHealth = 90;
+/* --- Estat de la UI / joc (Fase 4-5) -------------------------------------- */
 char     gHomeBg[24] = {0};
-enum class PetBase : uint8_t { Idle, Sleep };
-PetBase  gPetBase = PetBase::Idle;
-char     gTempAnim[20] = {0};
-uint32_t gTempAnimUntil = 0;
 uint32_t gHeartUntil = 0;
+bool     gWasSleeping = false;
 int16_t  gHeartX = 0;
 int16_t  gHeartY = 0;
 uint32_t gPetCooldown = 0;
@@ -386,19 +380,6 @@ void redrawPetTest()
 
 /* --- Pantalla principal amb UI (Fase 4) ----------------------------------- */
 
-/* Suma 'd' a un valor 0..100 mantenint-lo dins el rang. */
-uint8_t clampAdd(uint8_t value, int delta)
-{
-    int v = static_cast<int>(value) + delta;
-    if (v < 0) {
-        v = 0;
-    }
-    if (v > 100) {
-        v = 100;
-    }
-    return static_cast<uint8_t>(v);
-}
-
 /* Manté la mascota entre el HUD i les barres. */
 void applyHomeLayout()
 {
@@ -439,10 +420,6 @@ void startHome()
         return;
     }
 
-    gPetBase = PetBase::Idle;
-    gTempAnimUntil = 0;
-    gTempAnim[0] = '\0';
-
     applyHomeLayout();
     SpriteRenderer::setBackground(gHomeBg);
 
@@ -450,8 +427,9 @@ void startHome()
     BgRenderer::drawFull(gHomeBg);
     Display::setBacklight(100);
 
-    SpriteRenderer::setAnimation("IDLE");
+    SpriteRenderer::setAnimation(Pet::animation());
     SpriteRenderer::drawFrame();
+    gWasSleeping = Pet::sleeping();
 
     gMenuOpen = false;
     /* No registrem el hook de franges: llegir el tactil dins la transaccio SPI
@@ -462,7 +440,8 @@ void startHome()
     Ui::begin();
     Ui::drawMenuButton();
     homeHud();
-    Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+    const Pet::Needs& n0 = Pet::needs();
+    Ui::drawBars(n0.food, n0.happiness, n0.energy, n0.health);
 
     gScreen = Screen::Home;
     Serial.printf("[UI] pantalla principal: fons=%s mascota %ux%u a (%d,%d)\n",
@@ -472,49 +451,25 @@ void startHome()
                   SpriteRenderer::status().x, SpriteRenderer::status().y);
 }
 
-void playTempAnim(const char* name, uint32_t ms)
-{
-    SpriteRenderer::setAnimation(name);
-    strlcpy(gTempAnim, name, sizeof(gTempAnim));
-    gTempAnimUntil = millis() + ms;
-}
-
 void doFeed()
 {
-    gHunger = clampAdd(gHunger, 18);
-    gHappiness = clampAdd(gHappiness, 4);
-    playTempAnim("EAT", 1500);
-    Serial.printf("[UI] Menjar -> gana %u\n", static_cast<unsigned>(gHunger));
+    Pet::feed();
 }
 
 void doPlay()
 {
-    gHappiness = clampAdd(gHappiness, 15);
-    gEnergy = clampAdd(gEnergy, -10);
-    gHunger = clampAdd(gHunger, -3);
-    playTempAnim("PLAY", 1500);
-    Serial.printf("[UI] Jugar -> felicitat %u\n", static_cast<unsigned>(gHappiness));
+    Pet::play();
 }
 
 void doSleepToggle()
 {
-    gTempAnimUntil = 0;
-    if (gPetBase == PetBase::Sleep) {
-        gPetBase = PetBase::Idle;
-        Display::setBacklight(100);
-        Serial.println(F("[UI] Despertar"));
-    } else {
-        gPetBase = PetBase::Sleep;
-        Display::setBacklight(35);
-        Serial.println(F("[UI] A dormir (llum atenuada)"));
-    }
+    Pet::toggleSleep();
+    Display::setBacklight(Pet::sleeping() ? 35 : 100);
 }
 
 void doHeal()
 {
-    gHealth = clampAdd(gHealth, 25);
-    playTempAnim("CELEBRATE", 1200);
-    Serial.printf("[UI] Curar -> salut %u\n", static_cast<unsigned>(gHealth));
+    Pet::heal();
 }
 
 void doPet()
@@ -523,8 +478,7 @@ void doPet()
         return;
     }
     gPetCooldown = millis();
-    gHappiness = clampAdd(gHappiness, 3);
-    playTempAnim("HAPPY", 1000);
+    Pet::pet();
 
     int16_t px = 0;
     int16_t py = 0;
@@ -544,7 +498,7 @@ void openMenu()
         return;
     }
     gMenuOpen = true;
-    Ui::drawMenu(gPetBase == PetBase::Sleep);
+    Ui::drawMenu(Pet::sleeping());
     Serial.println(F("[UI] menu obert"));
 }
 
@@ -556,7 +510,8 @@ void closeMenu()
     gMenuOpen = false;
     Ui::invalidate();
     homeHud();
-    Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+    const Pet::Needs& n = Pet::needs();
+    Ui::drawBars(n.food, n.happiness, n.energy, n.health);
     Ui::drawMenuButton();
     Serial.println(F("[UI] menu tancat"));
 }
@@ -833,7 +788,7 @@ void printHelp()
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
                      "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
-                     "| shot [x y w h] | baud <n> | tmon [s]"));
+                     "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s>"));
 }
 
 void printInfo()
@@ -1021,6 +976,19 @@ void handleCommand(char* cmd)
         cmdShot(arg);
     } else if (strcmp(cmd, "baud") == 0) {
         cmdBaud(arg);
+    } else if (strcmp(cmd, "sets") == 0) {
+        int a = 0;
+        int b = 0;
+        int c = 0;
+        int d = 0;
+        if (arg == nullptr || sscanf(arg, "%d %d %d %d", &a, &b, &c, &d) != 4) {
+            Serial.println(F("[PET] us: sets <menjar> <felicitat> <energia> <salut>  (0..100)"));
+        } else {
+            Pet::debugSet(static_cast<uint8_t>(a), static_cast<uint8_t>(b),
+                          static_cast<uint8_t>(c), static_cast<uint8_t>(d));
+        }
+    } else if (strcmp(cmd, "needs") == 0) {
+        Pet::printStatus();
     } else if (strcmp(cmd, "tmon") == 0) {
         cmdTouchMon(arg);
     } else if (strcmp(cmd, "tth") == 0) {
@@ -1098,6 +1066,8 @@ void setup()
         cmdTouchMon(secs);
     }
 
+    Pet::begin();
+
     Serial.println(F("[SD] escanejant la targeta..."));
     if (SdAssets::begin()) {
         SdAssets::printTree(Serial, "/", 2);
@@ -1131,18 +1101,17 @@ void loop()
     }
 
     if (gScreen == Screen::Home) {
+        Pet::update(millis());
+
+        if (Pet::sleeping() != gWasSleeping) {
+            gWasSleeping = Pet::sleeping();
+            Display::setBacklight(gWasSleeping ? 35 : 100);
+        }
+
         if (SpriteRenderer::isActive()) {
-            /* Animacio base (IDLE/SLEEP) o animacio temporal en curs. */
-            if (gTempAnimUntil != 0) {
-                if (millis() >= gTempAnimUntil) {
-                    gTempAnimUntil = 0;
-                    SpriteRenderer::setAnimation(gPetBase == PetBase::Sleep ? "SLEEP" : "IDLE");
-                }
-            } else {
-                const char* want = (gPetBase == PetBase::Sleep) ? "SLEEP" : "IDLE";
-                if (strcmp(SpriteRenderer::animationName(), want) != 0) {
-                    SpriteRenderer::setAnimation(want);
-                }
+            const char* anim = Pet::animation();
+            if (strcmp(SpriteRenderer::animationName(), anim) != 0) {
+                SpriteRenderer::setAnimation(anim);
             }
 
             SpriteRenderer::update(millis());
@@ -1158,7 +1127,8 @@ void loop()
 
         if (!gMenuOpen) {
             homeHud();
-            Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+            const Pet::Needs& n = Pet::needs();
+            Ui::drawBars(n.food, n.happiness, n.energy, n.health);
         }
 
         /* Tocs: els detectats pel bucle o els latchats mentre es dibuixava. */

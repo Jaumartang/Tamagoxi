@@ -5,7 +5,25 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 4** — tàctil calibrat, HUD, barres i 4 botons grans.
+> Estat actual: **Fase 5** — el joc: necessitats que decauen, estats, accions i persistència.
+
+## Joc (Fase 5) — `src/pet.*`
+
+- **Necessitats** (0-100, en floats interns): menjar, felicitat, energia i salut.
+- **Decaïment** (per minut, a `config.h`): menjar −0.40 · felicitat −0.50 ·
+  energia −0.35 (mentre dorm, **+2.50**) · salut −0.15 si alguna necessitat
+  està per sota de 20, i **+0.10** si tot va bé.
+- **Estat → animació**: salut < 30 → `SICK`; dormint → `SLEEP`; menjar < 30 →
+  `HUNGRY`; felicitat < 30 → `SAD`; energia < 25 → s'adorm sol; si no, `IDLE`.
+- **Accions**: Menjar (+35 menjar) · Jugar (+30 felicitat, −15 energia,
+  −10 menjar) · Dormir/Despertar · Curar (+50 salut) · Carícia (+5 felicitat).
+  Si l'acció no té sentit (tip, cansat, ja està bé) es refusa i ho diu pel sèrie.
+- **Animacions temporals**: `EAT`, `PLAY`, `HAPPY`, `CELEBRATE` i, de tant en
+  tant, `EXTRA` (perquè es vegi que és viu).
+- **Persistència**: es desa a la NVS **a cada acció** i cada 3 minuts; en
+  arrencar es recupera (verificat).
+- **Decaïment fora de línia**: `Pet::setEpoch()` (que cridarà el NTP de la
+  Fase 6) aplica el temps que ha estat apagat, amb un màxim de 3 dies.
 
 ## Tàctil (calibració)
 
@@ -140,6 +158,8 @@ En arrencar:
 | `petpos <x> <y>\|center` | Mou la mascota (cantó superior-esquerre) o la centra horitzontalment |
 | `petreset` | Torna la mascota a la disposició per defecte de `config.h` |
 | `home` | Torna a la pantalla principal (HUD + mascota + barres + botó MENU) |
+| `needs` | Mostra les necessitats, l'estat i l'animació actual de la mascota |
+| `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |
 | `shot [x y w h]` | Captura la pantalla pel port (`tools/shot_decode.py`) |

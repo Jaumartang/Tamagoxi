@@ -80,6 +80,34 @@ static constexpr uint32_t PET_ANIM_SWITCH_MS = 6000;
 /* Fons que es fa servir a la pantalla de prova de la mascota. */
 static constexpr const char* PET_TEST_BG = "weather_00";
 
+/* --- Mascota: joc (Fase 5) ------------------------------------------------ */
+/* Velocitat de decaiment de les necessitats, en unitats per minut. */
+static constexpr float PET_DECAY_FOOD      = 0.40f;
+static constexpr float PET_DECAY_HAPPY     = 0.50f;
+static constexpr float PET_DECAY_ENERGY     = 0.35f;
+static constexpr float PET_SLEEP_RECOVER   = 2.50f;   /* energia/min dormint */
+static constexpr float PET_HEALTH_DROP     = 0.15f;   /* si alguna necessitat < 20 */
+static constexpr float PET_HEALTH_RECOVER  = 0.10f;   /* si tot va be */
+
+/* Llindars d'estat. */
+static constexpr float PET_LOW_FOOD     = 30.0f;
+static constexpr float PET_LOW_HAPPY    = 30.0f;
+static constexpr float PET_LOW_ENERGY   = 25.0f;
+static constexpr float PET_LOW_HEALTH   = 30.0f;
+static constexpr float PET_AUTO_SLEEP   = 15.0f;      /* s'adorm sol */
+static constexpr float PET_WAKE_ENERGY  = 98.0f;      /* es desperta */
+
+/* Efectes de les accions. */
+static constexpr float PET_FEED_FOOD     = 35.0f;
+static constexpr float PET_FEED_HAPPY    = 5.0f;
+static constexpr float PET_PLAY_HAPPY    = 30.0f;
+static constexpr float PET_PLAY_ENERGY   = -15.0f;
+static constexpr float PET_PLAY_FOOD     = -10.0f;
+static constexpr float PET_HEAL_HEALTH   = 50.0f;
+static constexpr float PET_PET_HAPPY     = 5.0f;
+
+/* Cada quan es desa l'estat a la NVS (ms). */
+static constexpr uint32_t PET_SAVE_PERIOD_MS = 180000;
 /* --- UI (Fase 4) ---------------------------------------------------------- */
 /* HUD compacte a dalt (28 px). */
 static constexpr int UI_HUD_TOP = 0;
