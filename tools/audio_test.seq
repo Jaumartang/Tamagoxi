@@ -1,0 +1,13 @@
+# Prova de so: to de 440 Hz i despres un de mes agut
+cmd audio
+wait 1
+log
+cmd beep 440 1500 60
+wait 3
+log
+cmd beep 880 800 60
+wait 2
+log
+cmd beep 220 2000 80
+wait 3
+log

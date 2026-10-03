@@ -12,7 +12,7 @@
 #include <math.h>
 #include <time.h>
 
-#include "config.h"
+#include "tg_config.h"
 
 #if __has_include(<secrets.h>)
 #include <secrets.h>

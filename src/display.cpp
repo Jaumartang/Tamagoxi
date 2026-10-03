@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 
-#include "config.h"
+#include "tg_config.h"
 #include "pins.h"
 
 /* Garantia en temps de compilacio: TFT_eSPI ha d'haver carregat

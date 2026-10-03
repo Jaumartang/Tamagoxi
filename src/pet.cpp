@@ -4,7 +4,7 @@
 #include <Preferences.h>
 #include <esp_system.h>
 
-#include "config.h"
+#include "tg_config.h"
 
 namespace {
 

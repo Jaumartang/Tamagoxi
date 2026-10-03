@@ -1,8 +1,9 @@
 #include <Arduino.h>
 #include <time.h>
 
+#include "audio.h"
 #include "bg_renderer.h"
-#include "config.h"
+#include "tg_config.h"
 #include "display.h"
 #include "led.h"
 #include "net.h"
@@ -889,7 +890,7 @@ void printHelp()
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
                      "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s> "
                      "| theme [n] | homebg [nom|auto] | wifi [ssid pass] | net | meteo "
-                     "| geo <lat> <lon> | tap <x> <y>"));
+                     "| geo <lat> <lon> | tap <x> <y> | beep [freq ms vol] | audio [dac|bt|vol n]"));
 }
 
 void printInfo()
@@ -1136,6 +1137,71 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "meteo") == 0) {
         Net::requestRefresh();
         Serial.println(F("[NET] refrescant la meteo..."));
+    } else if (strcmp(cmd, "beep") == 0) {
+        int freq = 440;
+        int ms = 1500;
+        int vol = 60;
+        if (arg != nullptr) {
+            sscanf(arg, "%d %d %d", &freq, &ms, &vol);
+        }
+        Audio::beep(static_cast<uint16_t>(freq), static_cast<uint16_t>(ms),
+                    static_cast<uint8_t>(vol));
+    } else if (strcmp(cmd, "audio") == 0) {
+        if (arg == nullptr) {
+            Audio::printStatus();
+        } else if (strcmp(arg, "dac") == 0) {
+            Audio::setOutput(Audio::Output::Dac);
+        } else if (strcmp(arg, "bt") == 0) {
+            Audio::setOutput(Audio::Output::Bluetooth);
+        } else if (strncmp(arg, "vol ", 4) == 0) {
+            Audio::setVolume(static_cast<uint8_t>(atoi(arg + 4)));
+            Audio::printStatus();
+        } else {
+            Serial.println(F("[AUDIO] us: audio [dac|bt|vol <n>]"));
+        }
+    } else if (strcmp(cmd, "music") == 0) {
+        if (arg == nullptr) {
+            Audio::printStatus();
+            const Audio::Status& st = Audio::status();
+            Serial.printf("[MUSIC] %u cancons, sonant=%d pausat=%d \"%s\" %lu/%lu s (%u%%)\n",
+                          static_cast<unsigned>(st.count), st.playing ? 1 : 0,
+                          st.paused ? 1 : 0, st.name,
+                          static_cast<unsigned long>(st.elapsedSec),
+                          static_cast<unsigned long>(st.totalSec),
+                          static_cast<unsigned>(st.percent));
+        } else if (strcmp(arg, "scan") == 0) {
+            Audio::scan();
+        } else if (strcmp(arg, "list") == 0) {
+            for (uint8_t i = 0; i < Audio::status().count; ++i) {
+                const Audio::Track* t = Audio::track(i);
+                if (t != nullptr) {
+                    Serial.printf("  %2u. %s  (%u kB)\n", static_cast<unsigned>(i + 1), t->name,
+                                  static_cast<unsigned>(t->bytes / 1024));
+                }
+            }
+        } else if (strncmp(arg, "play ", 5) == 0) {
+            const int n = atoi(arg + 5);
+            Audio::play(static_cast<uint8_t>((n > 0) ? (n - 1) : 0));
+        } else if (strcmp(arg, "pause") == 0) {
+            Audio::togglePause();
+        } else if (strcmp(arg, "stop") == 0) {
+            Audio::stop();
+        } else if (strcmp(arg, "next") == 0) {
+            Audio::next();
+        } else if (strcmp(arg, "prev") == 0) {
+            Audio::previous();
+        } else {
+            Serial.println(F("[MUSIC] us: music [scan|list|play <n>|pause|stop|next|prev]"));
+        }
+    } else if (strcmp(cmd, "wavgen") == 0) {
+        char name[40] = "prova.wav";
+        int secs = 8;
+        if (arg != nullptr) {
+            sscanf(arg, "%39s %d", name, &secs);
+        }
+        if (Audio::writeTestWav(name, static_cast<uint16_t>(secs))) {
+            Audio::scan();
+        }
     } else if (strcmp(cmd, "tap") == 0) {
         int tx = 0;
         int ty = 0;
@@ -1278,6 +1344,10 @@ void setup()
 
     /* Fase 6: WiFi + NTP + meteo, en una tasca propia (no bloqueja mai el bucle). */
     Net::begin();
+
+    /* Fase 7: so (encara nomes la sortida pel DAC intern de la placa). */
+    Audio::begin();
+    Audio::scan();
 
     /* Els panells (ajustos) poden canviar el fons a traves d'aquests hooks. */
     Panels::Hooks hooks = {panelSetBackground, panelIsAutoBackground, panelBackgroundName};

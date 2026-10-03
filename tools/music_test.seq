@@ -1,0 +1,20 @@
+# Fase 7: genera un WAV de prova a la SD i reprodueix-lo
+cmd wavgen prova.wav 6
+wait 8
+log
+cmd music list
+wait 2
+log
+cmd music play 1
+wait 6
+log
+cmd music
+wait 1
+log
+wait 4
+cmd music
+wait 1
+log
+cmd info
+wait 1
+log

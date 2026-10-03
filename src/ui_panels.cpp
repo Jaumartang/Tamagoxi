@@ -5,7 +5,7 @@
 #include <WiFi.h>
 #include <time.h>
 
-#include "config.h"
+#include "tg_config.h"
 #include "display.h"
 #include "led.h"
 #include "net.h"

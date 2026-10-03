@@ -6,7 +6,7 @@
 #include <TFT_eSPI.h>
 #include <esp_heap_caps.h>
 
-#include "config.h"
+#include "tg_config.h"
 #include "display.h"
 #include "sd_assets.h"
 #include "storage.h"

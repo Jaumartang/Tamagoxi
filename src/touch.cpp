@@ -4,7 +4,7 @@
 #include <Preferences.h>
 #include <TFT_eSPI.h>
 
-#include "config.h"
+#include "tg_config.h"
 #include "display.h"
 
 namespace {

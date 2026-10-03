@@ -91,6 +91,12 @@ static constexpr uint32_t NET_WIFI_TIMEOUT_MS   = 20000u;
 /* Pila de la tasca de xarxa (el TLS necessita uns quants kB). */
 static constexpr uint32_t NET_TASK_STACK        = 8192u;
 
+/* --- Fase 7: so ----------------------------------------------------------- */
+/* Freqüencia de mostreig de la sortida d'audio (DAC intern / Bluetooth). */
+static constexpr uint32_t AUDIO_SAMPLE_RATE = 44100;
+/* Pila de la tasca de so (el decodificador MP3 en demana uns quants kB). */
+static constexpr uint32_t AUDIO_TASK_STACK  = 8192;
+
 /* Fons que es fa servir a la pantalla de prova de la mascota. */
 static constexpr const char* PET_TEST_BG = "spring";
 

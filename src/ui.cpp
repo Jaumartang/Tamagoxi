@@ -3,7 +3,7 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 
-#include "config.h"
+#include "tg_config.h"
 #include "display.h"
 #include "sprite_renderer.h"
 

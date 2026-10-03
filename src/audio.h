@@ -1,0 +1,71 @@
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+
+/*
+ * audio.h - So (Fase 7): reproduccio de musica i sortida d'audio.
+ *
+ * Sortides possibles:
+ *   - DAC  : el DAC intern de l'ESP32 (GPIO26) connectat a l'amplificador
+ *            FM8002B de la placa i, d'alla, a l'altaveu.
+ *   - BT   : emissor Bluetooth A2DP (enviar la musica a un altaveu Bluetooth).
+ *
+ * Tot el so es treballa en una tasca propia perque la mascota no s'encalli.
+ */
+
+namespace Audio {
+
+enum class Output : uint8_t { Dac, Bluetooth };
+
+void begin();
+
+/* Sortida activa (es pot canviar en calent). */
+void setOutput(Output out);
+Output output();
+
+/* Prova de maquinari: to de 'freqHz' durant 'ms' amb el volum indicat (0-100). */
+bool beep(uint16_t freqHz, uint16_t ms, uint8_t volume);
+
+/* Cambra de so: llista de cançons, estat i control del reproductor. */
+
+constexpr uint8_t kMaxTracks = 64;
+constexpr size_t  kNameMax   = 48;
+
+struct Track {
+    char     name[kNameMax];
+    uint32_t bytes;
+};
+
+struct Status {
+    bool     playing;
+    bool     paused;
+    uint8_t  count;          /* cançons trobades a /music */
+    uint8_t  index;          /* canço en curs */
+    char     name[kNameMax];
+    uint32_t elapsedSec;
+    uint32_t totalSec;
+    uint8_t  percent;
+};
+
+void scan();
+const Track* track(uint8_t index);
+const Status& status();
+bool isPlaying();
+
+void play(uint8_t index);
+void togglePause();
+void stop();
+void next();
+void previous();
+
+/* Crea un WAV de prova a /music (per validar el reproductor sense ordinador). */
+bool writeTestWav(const char* name, uint16_t seconds);
+
+/* Volum 0-100 (es desa). */
+void setVolume(uint8_t volume);
+uint8_t volume();
+
+void printStatus();
+
+}  // namespace Audio
