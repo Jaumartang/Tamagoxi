@@ -5,7 +5,8 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 6.5** — xarxa (WiFi, NTP i meteo) + menú de dalt i panell de WiFi amb teclat.
+> Estat actual: **Fase 7** — música de la SD (MP3/WAV) pel DAC de la placa **i pels
+> auriculars Bluetooth** (emissor A2DP), sobre la Fase 6.5 (WiFi/metèo + menús i panells).
 
 ## So i música (Fase 7) — `src/audio.*`
 
@@ -13,8 +14,16 @@ La placa té un amplificador (**FM8002E**) amb l'entrada al **GPIO26** (DAC2 int
 de l'ESP32) i connector per a altaveu extern. El so viu en una **tasca pròpia**
 (nucli 0), així que la mascota i el tàctil no s'encallen mai mentre sona.
 
-- **Sortida**: `audio dac` (altaveu de la placa). `audio bt` (Bluetooth) encara
-  està en construcció.
+- **Sortida**: `audio dac` (altaveu de la placa) o `audio bt` (Bluetooth).
+- **Auriculars Bluetooth** 🎧: `bt source` encén l'**emissor A2DP** (la placa es
+  diu *Tamagoxi*): emparella-hi uns auriculars o un altaveu i toca la música; el
+  so hi va en comptes d'anar a l'altaveu de la placa. `bt sink` fa el contrari
+  (el mòbil hi envia la seva música) i `bt off` apaga el Bluetooth.
+  Com que la pila Bluetooth necessita ~90 kB i aquest xip **no té PSRAM**, quan
+  s'encén: (1) la mascota deixa anar els seus buffers (es queda aturada) i
+  (2) s'atura el WiFi (la ràdio no pot fer les dues coses alhora). En apagar-lo,
+  la placa **es reinicia** perquè la memòria del Bluetooth només es recupera
+  així (torna en 3 segons).
 - **Música**: fitxers **`.mp3`** i **`.wav`** de la carpeta **`/music`** de la SD.
   El decodificador (`arduino-audio-tools` + `libhelix`) ajusta sol la freqüència
   de mostreig i els canals segons el fitxer.
@@ -265,6 +274,7 @@ En arrencar:
 | `wavgen [nom] [segons]` | Crea un WAV de prova a `/music` (melodia) |
 | `beep [freq ms vol]` | To de prova per validar l'altaveu |
 | `audio [dac\|bt\|vol n]` | Sortida d'àudio (DAC de la placa / Bluetooth) i volum |
+| `bt [source\|sink\|off]` | Bluetooth: emissor (auriculars) / altaveu (mòbil) / apagar |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |
