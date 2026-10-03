@@ -58,6 +58,10 @@ uint8_t scale();
 void setPosition(int16_t x, int16_t y);
 void centerX();
 
+/* Hook cridat entre franges mentre es dibuixa un frame (per mostrejar el
+ * tactil tot i que el bucle estigui ocupat). Passa nullptr per treure'l. */
+void setBandHook(void (*hook)());
+
 /* Torna a la disposicio per defecte de config.h (mida i posicio). */
 void resetLayout();
 

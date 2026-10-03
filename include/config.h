@@ -73,7 +73,7 @@ static constexpr uint32_t BG_GALLERY_INTERVAL_MS = 5000;
 /* Escala entera de l'sprite (128 px -> 128*PET_SCALE px). Valors 1..3. */
 static constexpr uint8_t PET_SCALE = 2;
 /* Fila (y) on comenca el rectangle de la mascota. X = centrat + PET_OFFSET_X. */
-static constexpr int PET_AREA_TOP = 80;
+static constexpr int PET_AREA_TOP = 44;
 static constexpr int PET_OFFSET_X = 0;
 /* Galeria d'animacions: temps entre animacio i animacio. */
 static constexpr uint32_t PET_ANIM_SWITCH_MS = 6000;
@@ -84,15 +84,27 @@ static constexpr const char* PET_TEST_BG = "weather_00";
 /* Franja del HUD superior (hora, temps, WiFi). */
 static constexpr int UI_HUD_TOP = 0;
 static constexpr int UI_HUD_H   = 40;
-/* Barres de necessitats (4 files). */
-static constexpr int UI_BARS_TOP = 336;
-static constexpr int UI_BARS_BOT = 400;
-/* Botons grans (4, repartits en l'amplada). */
-static constexpr int UI_BUTTONS_TOP = 400;
-static constexpr int UI_BUTTONS_BOT = 480;
+
+/* Panell de barres de necessitats (4 files compactes). */
+static constexpr int UI_BARS_TOP = 304;
+static constexpr int UI_BARS_BOT = 356;
+
+/* Zona inferior: boto MENU (menu tancat) o panell desplegable (obert). */
+static constexpr int UI_MENU_BTN_TOP = 420;
+static constexpr int UI_MENU_BTN_BOT = 476;
+static constexpr int UI_MENU_BTN_L   = 60;
+static constexpr int UI_MENU_BTN_R   = 260;
+
+/* Panell del menu desplegable (cobreix les barres i el boto MENU, no la mascota). */
+static constexpr int UI_MENU_TOP    = 304;
+static constexpr int UI_MENU_BOT    = 480;
+static constexpr int UI_MENU_HEADER = 32;
+
 /* Premuda llarga del rellotge del HUD per al menu d'ajustos (ms). */
 static constexpr uint32_t UI_LONGPRESS_MS = 2000;
 /* Cooldown minim entre carícies (anti-spam). */
 static constexpr uint32_t UI_PET_COOLDOWN_MS = 1200;
 /* Durada del cor de caricia a pantalla (ms). */
 static constexpr uint32_t UI_HEART_MS = 1200;
+/* Anti-rebot del tactil: no processar dos tocs seguits en menys d'aixo (ms). */
+static constexpr uint32_t UI_TAP_DEBOUNCE_MS = 180;

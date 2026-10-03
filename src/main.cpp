@@ -75,8 +75,11 @@ int16_t  gHeartY = 0;
 uint32_t gPetCooldown = 0;
 uint32_t gPressStart = 0;
 bool     gLongPressDone = false;
-Ui::Zone gBtnFlash = Ui::Zone::None;
-uint32_t gBtnFlashUntil = 0;
+bool     gMenuOpen = false;
+uint32_t gLastTapMs = 0;
+volatile bool    gTouchLatch = false;
+volatile int16_t gTouchLatchX = 0;
+volatile int16_t gTouchLatchY = 0;
 
 char     gLine[CONSOLE_LINE_MAX];
 uint16_t gLineLen = 0;
@@ -396,6 +399,21 @@ uint8_t clampAdd(uint8_t value, int delta)
     return static_cast<uint8_t>(v);
 }
 
+/* Hook cridat entre franges mentre la mascota es dibuixa: mostreja el tactil i
+ * en reté el primer toc, aixi no es perd cap toc encara que el bucle estigui
+ * ocupat pintant. */
+void bandHook()
+{
+    if (Touch::update() && !gTouchLatch) {
+        int16_t lx = 0;
+        int16_t ly = 0;
+        Touch::getCoords(lx, ly);
+        gTouchLatchX = lx;
+        gTouchLatchY = ly;
+        gTouchLatch = true;
+    }
+}
+
 /* Manté la mascota entre el HUD i les barres. */
 void applyHomeLayout()
 {
@@ -450,9 +468,12 @@ void startHome()
     SpriteRenderer::setAnimation("IDLE");
     SpriteRenderer::drawFrame();
 
+    gMenuOpen = false;
+    SpriteRenderer::setBandHook(bandHook);
+
     Ui::invalidate();
     Ui::begin();
-    Ui::drawButtons();
+    Ui::drawMenuButton();
     homeHud();
     Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
 
@@ -529,12 +550,53 @@ void doPet()
     Serial.println(F("[UI] Caricia!"));
 }
 
-/* Marca visualment un boto com premut durant un instant. */
-void flashButton(Ui::Zone zone)
+/* Obre/plega el menu desplegable i processa un toc a la pantalla principal. */
+void openMenu()
 {
-    Ui::setButtonPressed(zone, true);
-    gBtnFlash = zone;
-    gBtnFlashUntil = millis() + 150;
+    if (gMenuOpen) {
+        return;
+    }
+    gMenuOpen = true;
+    Ui::drawMenu(gPetBase == PetBase::Sleep);
+    Serial.println(F("[UI] menu obert"));
+}
+
+void closeMenu()
+{
+    if (!gMenuOpen) {
+        return;
+    }
+    gMenuOpen = false;
+    Ui::invalidate();
+    homeHud();
+    Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+    Ui::drawMenuButton();
+    Serial.println(F("[UI] menu tancat"));
+}
+
+void handleHomeTap(int16_t tx, int16_t ty)
+{
+    const Ui::Zone z = Ui::hitTest(tx, ty, gMenuOpen);
+    if (gMenuOpen) {
+        switch (z) {
+            case Ui::Zone::MenuFeed:  doFeed();  closeMenu(); break;
+            case Ui::Zone::MenuPlay:  doPlay();  closeMenu(); break;
+            case Ui::Zone::MenuSleep: doSleepToggle(); closeMenu(); break;
+            case Ui::Zone::MenuHeal:  doHeal();  closeMenu(); break;
+            case Ui::Zone::MenuClose: closeMenu(); break;
+            default: break;
+        }
+        return;
+    }
+    switch (z) {
+        case Ui::Zone::MenuButton: openMenu(); break;
+        case Ui::Zone::Pet:        doPet();    break;
+        case Ui::Zone::HudClock:
+            gPressStart = millis();
+            gLongPressDone = false;
+            break;
+        default: break;
+    }
 }
 
 /* --- Pantalles de la targeta SD ------------------------------------------- */
@@ -723,7 +785,7 @@ void printHelp()
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
                      "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
-                     "| petreset | home | act <feed|play|sleep|heal|pet> "
+                     "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
                      "| shot [x y w h] | baud <n>"));
 }
 
@@ -789,6 +851,11 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "colortest") == 0) {
         gScreen = Screen::Static;
         drawColourBands();
+    } else if (strcmp(cmd, "menu") == 0) {
+        if (gScreen != Screen::Home) {
+            startHome();
+        }
+        openMenu();
     } else if (strcmp(cmd, "act") == 0) {
         if (arg == nullptr) {
             Serial.println(F("[UI] us: act <feed|play|sleep|heal|pet>"));
@@ -1048,42 +1115,40 @@ void loop()
             }
         }
 
-        homeHud();
-        Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+        if (!gMenuOpen) {
+            homeHud();
+            Ui::drawBars(gHunger, gHappiness, gEnergy, gHealth);
+        }
 
-        if (tap) {
-            switch (Ui::hitTest(x, y)) {
-                case Ui::Zone::Feed:  flashButton(Ui::Zone::Feed);  doFeed();  break;
-                case Ui::Zone::Play:  flashButton(Ui::Zone::Play);  doPlay();  break;
-                case Ui::Zone::Sleep: flashButton(Ui::Zone::Sleep); doSleepToggle(); break;
-                case Ui::Zone::Heal:  flashButton(Ui::Zone::Heal);  doHeal();  break;
-                case Ui::Zone::Pet:   doPet(); break;
-                case Ui::Zone::HudClock:
-                    gPressStart = millis();
-                    gLongPressDone = false;
-                    break;
-                default: break;
-            }
+        /* Tocs: els detectats pel bucle o els latchats mentre es dibuixava. */
+        int16_t tx = x;
+        int16_t ty = y;
+        bool haveTap = tap;
+        if (gTouchLatch) {
+            gTouchLatch = false;
+            haveTap = true;
+            tx = gTouchLatchX;
+            ty = gTouchLatchY;
+        }
+        if (haveTap && (millis() - gLastTapMs >= UI_TAP_DEBOUNCE_MS)) {
+            gLastTapMs = millis();
+            handleHomeTap(tx, ty);
         }
 
         /* Premuda llarga al rellotge del HUD = menu d'ajustos (Fase 7). */
-        if (pressed && Ui::hitTest(x, y) == Ui::Zone::HudClock) {
+        if (!gMenuOpen && pressed && Ui::hitTest(x, y, false) == Ui::Zone::HudClock) {
             if (gPressStart == 0) {
                 gPressStart = millis();
             }
             if (!gLongPressDone && (millis() - gPressStart >= UI_LONGPRESS_MS)) {
                 gLongPressDone = true;
-                Serial.println(F("[UI] premuda llarga al rellotge -> menu d'ajustos (Fase 7)"));
+                Serial.println(F("[UI] premuda llarga -> calibracio del tactil"));
+                Touch::calibrate();
+                startHome();
             }
         } else {
             gPressStart = 0;
             gLongPressDone = false;
-        }
-
-        /* Apaga el marc de boto premut passat un instant. */
-        if (gBtnFlash != Ui::Zone::None && millis() >= gBtnFlashUntil) {
-            Ui::setButtonPressed(gBtnFlash, false);
-            gBtnFlash = Ui::Zone::None;
         }
     } else if (gScreen == Screen::Gallery) {
         const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();

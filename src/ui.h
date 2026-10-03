@@ -22,10 +22,12 @@ enum class Zone : uint8_t {
     Pet,        /* damunt la mascota -> caricia */
     HudClock,   /* rellotge del HUD -> premuda llarga = ajustos */
     HudOther,
-    Feed,
-    Play,
-    Sleep,
-    Heal,
+    MenuButton, /* boto MENU (menu tancat) */
+    MenuFeed,   /* opcions del menu desplegable (obert) */
+    MenuPlay,
+    MenuSleep,
+    MenuHeal,
+    MenuClose,
 };
 
 struct Hud {
@@ -45,12 +47,12 @@ void drawHud(const Hud& hud);
 /* Barres de necessitats, 0..100 (només repinta les que canvien). */
 void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health);
 
-/* Botons grans i estat premut. */
-void drawButtons();
-void setButtonPressed(Zone zone, bool pressed);
+/* Boto MENU (menu tancat) i panell desplegable (menu obert). */
+void drawMenuButton();
+void drawMenu(bool sleeping);
 
-/* Zona de pantalla on s'ha tocat. */
-Zone hitTest(int16_t x, int16_t y);
+/* Zona de pantalla on s'ha tocat (cal saber si el menu es obert). */
+Zone hitTest(int16_t x, int16_t y, bool menuOpen);
 
 /* Rectangle de la mascota (x,y,w,h) tal com el te SpriteRenderer. */
 void petRect(int16_t& x, int16_t& y, int16_t& w, int16_t& h);

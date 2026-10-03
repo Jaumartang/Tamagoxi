@@ -6,7 +6,8 @@
 namespace {
 
 constexpr const char* kNamespace = "tg_cfg";
-constexpr uint16_t    kMagic     = 0x5A01;
+/* Canviar la marca invalida les dades desades anteriors (nou format/disposicio). */
+constexpr uint16_t    kMagic     = 0x5A02;
 
 }  // namespace
 

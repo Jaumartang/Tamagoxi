@@ -29,6 +29,7 @@ constexpr uint8_t kMaxScale = 3;
 
 uint8_t  gScale       = PET_SCALE;
 uint8_t  gMaxScale    = kMaxScale;   /* maxima escala que cap a la pantalla */
+void   (*gBandHook)() = nullptr;     /* mostreig del tactil entre franges */
 
 bool ieq(const char* a, const char* b)
 {
@@ -148,6 +149,11 @@ void setBackground(const char* name)
 const char* backgroundName()
 {
     return gBgName;
+}
+
+void setBandHook(void (*hook)())
+{
+    gBandHook = hook;
 }
 
 void setScale(uint8_t s)
@@ -350,6 +356,11 @@ uint32_t drawFrame()
             }
         }
         t.pushPixels(reinterpret_cast<uint16_t*>(gComp), static_cast<uint32_t>(boxW) * lines);
+
+        /* Aprofitem entre franges per mostrejar el tactil (el bucle esta ocupat). */
+        if (gBandHook != nullptr) {
+            gBandHook();
+        }
     }
 
     t.endWrite();

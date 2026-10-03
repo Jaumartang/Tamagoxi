@@ -11,16 +11,20 @@ lògica del joc.
 
 ```
 y 0..40    HUD: hora · icona/temperatura · WiFi
-y 80..336  MASCOTA (256×256)         <- només la toca SpriteRenderer
-y 336..400 barres: gana · felicitat · energia · salut
-y 400..480 botons: Menjar · Jugar · Dormir · Curar  (80×80)
+y 44..300  MASCOTA (256×256)         <- només la toca SpriteRenderer
+y 304..356 panell de barres: gana · felicitat · energia · salut
+y 420..476 boto ≡ MENU
 ```
 
-- El **HUD i les barres** es repinten només quan canvia alguna cosa; els botons, un sol cop.
+- El **HUD** i les **barres** es repinten només quan canvia alguna cosa.
+- El boto **MENU** obre un **desplegable** (y 304..480) amb 4 accions grans:
+  **Menjar · Jugar · Dormir/Despertar · Curar** (i ✕ per tancar). La mascota
+  continua animant-se mentre el menú és obert.
 - **Tocar la mascota** = carícia (anim `HAPPY` + cor, amb cooldown).
-- **Botons** = accions (de moment ajusten valors de prova; la Fase 5 hi posa el joc real).
-- **Mantenir premut el rellotge** (2 s) = futur menú d'ajustos (Fase 7).
+- **Premuda llarga (2 s) al rellotge** = tornar a **calibrar el tàctil**.
 - El rellotge mostra l'**uptime** com a marcador fins que el NTP arribi a la Fase 6.
+- El tàctil es mostreja **entre franges** mentre es dibuixa la mascota, perquè
+  no es perdi cap toc encara que la pantalla estigui ocupada.
 
 ## Rendiment (mesurat)
 
@@ -120,8 +124,11 @@ En arrencar:
 | `petscale <1-3>` | Canvia la mida de la mascota (limitada al que cap a la pantalla) |
 | `petpos <x> <y>\|center` | Mou la mascota (cantó superior-esquerre) o la centra horitzontalment |
 | `petreset` | Torna la mascota a la disposició per defecte de `config.h` |
-| `home` | Torna a la pantalla principal (HUD + mascota + barres + botons) |
-| `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués tocat el botó |
+| `home` | Torna a la pantalla principal (HUD + mascota + barres + botó MENU) |
+| `menu` | Obre el menú desplegable d'accions |
+| `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |
+| `shot [x y w h]` | Captura la pantalla pel port (`tools/shot_decode.py`) |
+| `baud <n>` | Canvia la velocitat del port (per a la captura) |
 | `bench [name]` | Mesura lectura SD vs push a pantalla d'un fons |
 | `tth <n>` | Llindar de pressió del tàctil (per defecte 400) |
 | `info` | Estat: heap, backlight, tàctil |
