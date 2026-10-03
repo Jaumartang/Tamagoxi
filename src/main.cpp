@@ -13,6 +13,7 @@
 #include "storage.h"
 #include "touch.h"
 #include "ui.h"
+#include "ui_panels.h"
 
 /*
  * main.cpp - Tamagoxi v2 (Tamagotchi gegant per a la Noa)
@@ -557,9 +558,65 @@ bool backgroundExists(const char* name)
     return false;
 }
 
+/* --- Panells modals (Fase 6.5) -------------------------------------------- */
+
+/* El panell d'ajustos canvia el fons a traves d'aquests callbacks. */
+void panelSetBackground(const char* name, bool autoBg)
+{
+    gAutoBg = autoBg;
+    Storage::saveHomeAuto(autoBg);
+    if (!autoBg && name != nullptr && name[0] != '\0') {
+        strlcpy(gHomeBg, name, sizeof(gHomeBg));
+        Storage::saveHomeBg(gHomeBg);
+        Serial.printf("[UI] fons fixat: %s\n", gHomeBg);
+    } else {
+        Net::requestRefresh();
+        Serial.println(F("[UI] fons automatic (segons la meteo)"));
+    }
+}
+
+bool panelIsAutoBackground()
+{
+    return gAutoBg;
+}
+
+const char* panelBackgroundName()
+{
+    return gHomeBg;
+}
+
+/* Tanca el panell obert i restaura la pantalla de sota. */
+bool closePanels()
+{
+    const Panels::Id id = Panels::current();
+    if (!Panels::close()) {
+        return false;
+    }
+
+    if (id == Panels::Id::TopMenu) {
+        /* Nomes cal restaurar la zona que tapava el desplegable. */
+        int16_t mx = 0;
+        int16_t my = 0;
+        int16_t mw = 0;
+        int16_t mh = 0;
+        Panels::topMenuRect(mx, my, mw, mh);
+        BgRenderer::drawRegion(gHomeBg, mx, my, mw, mh);
+        redrawHomeUi();
+        if (SpriteRenderer::isActive()) {
+            SpriteRenderer::drawFrame();
+        }
+    } else {
+        startHome();
+    }
+    Serial.printf("[UI] panell \"%s\" tancat\n", Panels::name(id));
+    return true;
+}
+
 void handleHomeTap(int16_t tx, int16_t ty)
 {
     const Ui::Zone z = Ui::hitTest(tx, ty, gMenuOpen);
+    Serial.printf("[UI] toc a casa %d,%d -> zona %d\n", static_cast<int>(tx),
+                  static_cast<int>(ty), static_cast<int>(z));
     if (gMenuOpen) {
         switch (z) {
             case Ui::Zone::MenuFeed:  doFeed();  closeMenu(); break;
@@ -574,6 +631,7 @@ void handleHomeTap(int16_t tx, int16_t ty)
     switch (z) {
         case Ui::Zone::MenuButton: openMenu(); break;
         case Ui::Zone::Pet:        doPet();    break;
+        case Ui::Zone::HudMenu:    Panels::openTopMenu(); break;
         case Ui::Zone::HudClock:
             gPressStart = millis();
             gLongPressDone = false;
@@ -831,7 +889,7 @@ void printHelp()
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
                      "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s> "
                      "| theme [n] | homebg [nom|auto] | wifi [ssid pass] | net | meteo "
-                     "| geo <lat> <lon>"));
+                     "| geo <lat> <lon> | tap <x> <y>"));
 }
 
 void printInfo()
@@ -918,6 +976,7 @@ void handleCommand(char* cmd)
             Serial.println(F("[UI] accio desconeguda"));
         }
     } else if (strcmp(cmd, "home") == 0) {
+        Panels::close();          /* si hi havia un panell obert, el tanquem */
         startHome();
     } else if (strcmp(cmd, "bg") == 0) {
         gScreen = Screen::Gallery;
@@ -1077,6 +1136,17 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "meteo") == 0) {
         Net::requestRefresh();
         Serial.println(F("[NET] refrescant la meteo..."));
+    } else if (strcmp(cmd, "tap") == 0) {
+        int tx = 0;
+        int ty = 0;
+        if (arg != nullptr && sscanf(arg, "%d %d", &tx, &ty) == 2) {
+            gTouchLatchX = static_cast<int16_t>(tx);
+            gTouchLatchY = static_cast<int16_t>(ty);
+            gTouchLatch  = true;      /* injecta un toc com si fos del dit */
+            Serial.printf("[TAP] %d,%d\n", tx, ty);
+        } else {
+            Serial.println(F("[TAP] us: tap <x> <y>"));
+        }
     } else if (strcmp(cmd, "geo") == 0) {
         if (arg == nullptr) {
             Net::printStatus();
@@ -1209,6 +1279,10 @@ void setup()
     /* Fase 6: WiFi + NTP + meteo, en una tasca propia (no bloqueja mai el bucle). */
     Net::begin();
 
+    /* Els panells (ajustos) poden canviar el fons a traves d'aquests hooks. */
+    Panels::Hooks hooks = {panelSetBackground, panelIsAutoBackground, panelBackgroundName};
+    Panels::setHooks(hooks);
+
     updateLed();
     gHeapTimer = millis();
     printInfo();
@@ -1245,7 +1319,19 @@ void loop()
             Display::setBacklight(gWasSleeping ? 35 : 100);
         }
 
-        if (SpriteRenderer::isActive()) {
+        /* Panells modals: mentre n'hi ha un d'obert, la mascota queda congelada
+         * (perque res no repinti a sobre del panell). */
+        if (Panels::isOpen()) {
+            Panels::update(millis());
+            if (Panels::current() == Panels::Id::TopMenu) {
+                /* El rellotge del HUD es queda viu darrere del desplegable. */
+                homeHud();
+                const Pet::Needs& np = Pet::needs();
+                Ui::drawBars(np.food, np.happiness, np.energy, np.health);
+            }
+        }
+
+        if (!Panels::isOpen() && SpriteRenderer::isActive()) {
             const char* anim = Pet::animation();
             if (strcmp(SpriteRenderer::animationName(), anim) != 0) {
                 SpriteRenderer::setAnimation(anim);
@@ -1262,7 +1348,7 @@ void loop()
             }
         }
 
-        if (!gMenuOpen) {
+        if (!Panels::isOpen() && !gMenuOpen) {
             homeHud();
             const Pet::Needs& n = Pet::needs();
             Ui::drawBars(n.food, n.happiness, n.energy, n.health);
@@ -1293,11 +1379,18 @@ void loop()
         }
         if (haveTap && (millis() - gLastTapMs >= UI_TAP_DEBOUNCE_MS)) {
             gLastTapMs = millis();
-            handleHomeTap(tx, ty);
+            if (Panels::isOpen()) {
+                if (!Panels::handleTap(tx, ty)) {
+                    closePanels();
+                }
+            } else {
+                handleHomeTap(tx, ty);
+            }
         }
 
-        /* Premuda llarga al rellotge del HUD = menu d'ajustos (Fase 7). */
-        if (!gMenuOpen && pressed && Ui::hitTest(x, y, false) == Ui::Zone::HudClock) {
+        /* Premuda llarga al rellotge del HUD = calibratge del tactil. */
+        if (!Panels::isOpen() && !gMenuOpen && pressed &&
+            Ui::hitTest(x, y, false) == Ui::Zone::HudClock) {
             if (gPressStart == 0) {
                 gPressStart = millis();
             }

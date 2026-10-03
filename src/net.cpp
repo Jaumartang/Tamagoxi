@@ -37,6 +37,14 @@ uint32_t            gLastTryMs   = 0;
 
 Net::Weather gWeather = {false, 0, 0, 0, true, 0};
 
+/* --- Escaneig de xarxes (el fa la tasca; la UI nomes llegeix) -------------- */
+constexpr uint8_t kMaxAps = 16;
+Net::Ap         gAps[kMaxAps];
+volatile uint8_t gApCount     = 0;
+volatile bool    gScanRequest = false;
+volatile bool    gScanRunning = false;
+volatile bool    gScanDone    = false;
+
 /* --- Configuracio (protegida pel mutex) ----------------------------------- */
 char  gSsid[33] = {0};
 char  gPass[65] = {0};
@@ -275,10 +283,68 @@ bool fetchWeather()
     return true;
 }
 
+void doScan()
+{
+    gScanRunning = true;
+    gScanDone    = false;
+    Serial.println(F("[NET] escanejant xarxes WiFi..."));
+    WiFi.mode(WIFI_STA);
+    WiFi.scanDelete();
+    const int16_t found = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+
+    lock();
+    gApCount = 0;
+    for (int16_t i = 0; i < found && gApCount < kMaxAps; ++i) {
+        const String ssid = WiFi.SSID(i);
+        if (ssid.length() == 0 || ssid.length() >= sizeof(gAps[0].ssid)) {
+            continue;                       /* oculta o massa llarga */
+        }
+        bool dup = false;
+        for (uint8_t j = 0; j < gApCount; ++j) {
+            if (strcmp(gAps[j].ssid, ssid.c_str()) == 0) {
+                dup = true;                 /* repetida: ens quedem la mes forta */
+                const int8_t r = static_cast<int8_t>(WiFi.RSSI(i));
+                if (r > gAps[j].rssi) {
+                    gAps[j].rssi = r;
+                }
+                break;
+            }
+        }
+        if (dup) {
+            continue;
+        }
+        strlcpy(gAps[gApCount].ssid, ssid.c_str(), sizeof(gAps[0].ssid));
+        gAps[gApCount].rssi   = static_cast<int8_t>(WiFi.RSSI(i));
+        gAps[gApCount].secure = (WiFi.encryptionType(i) != WIFI_AUTH_OPEN);
+        ++gApCount;
+    }
+    /* Ordenem de mes forta a mes feble (bombolla; son poques). */
+    for (uint8_t a = 0; a + 1 < gApCount; ++a) {
+        for (uint8_t b = 0; b + 1 < gApCount - a; ++b) {
+            if (gAps[b].rssi < gAps[b + 1].rssi) {
+                const Net::Ap tmp = gAps[b];
+                gAps[b]     = gAps[b + 1];
+                gAps[b + 1] = tmp;
+            }
+        }
+    }
+    unlock();
+
+    WiFi.scanDelete();
+    gScanRunning = false;
+    gScanDone    = true;
+    Serial.printf("[NET] %u xarxes WiFi\n", static_cast<unsigned>(gApCount));
+}
+
 void netTask(void*)
 {
     Serial.println(F("[NET] tasca de xarxa en marxa (nucli 0)"));
     for (;;) {
+        if (gScanRequest) {
+            gScanRequest = false;
+            doScan();
+        }
+
         if (WiFi.status() != WL_CONNECTED) {
             if (!connectWifi()) {
                 gTimeSynced = false;
@@ -470,6 +536,42 @@ float longitude()
 void requestRefresh()
 {
     gRefresh = true;
+}
+
+void startScan()
+{
+    gScanDone    = false;
+    gScanRunning = true;
+    gScanRequest = true;
+    if (gTask != nullptr) {
+        xTaskNotifyGive(gTask);
+    }
+}
+
+bool scanRunning()
+{
+    return gScanRunning;
+}
+
+bool scanDone()
+{
+    return gScanDone;
+}
+
+uint8_t scanCount()
+{
+    return gApCount;
+}
+
+Ap scanAp(uint8_t index)
+{
+    Ap out = {};
+    lock();
+    if (index < gApCount) {
+        out = gAps[index];
+    }
+    unlock();
+    return out;
 }
 
 const char* backgroundName()

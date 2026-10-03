@@ -21,6 +21,7 @@ enum class Zone : uint8_t {
     None,
     Pet,        /* damunt la mascota -> caricia */
     HudClock,   /* rellotge del HUD -> premuda llarga = ajustos */
+    HudMenu,    /* boto de menu del HUD -> desplegable */
     HudOther,
     MenuButton, /* boto MENU (menu tancat) */
     MenuFeed,   /* opcions del menu desplegable (obert) */
@@ -46,6 +47,14 @@ uint8_t theme();
 uint8_t themeCount();
 const char* themeName(uint8_t index);
 void setTheme(uint8_t index);
+
+/* Colors del tema actual (els panells modals també els fan servir). */
+uint16_t colorPanelBg();
+uint16_t colorPanelEdge();
+uint16_t colorAccent();
+uint16_t colorTrack();
+uint16_t colorClose();
+uint16_t colorRow(uint8_t index);
 
 /* HUD superior (només repinta si canvia respecte de l'ultim cop). */
 void drawHud(const Hud& hud);

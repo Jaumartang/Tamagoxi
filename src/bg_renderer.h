@@ -35,6 +35,10 @@ void end();
  * Retorna els ms emprats (0 si hi ha hagut un error; vegeu status().lastOk). */
 uint32_t drawFull(const char* name);
 
+/* Pinta NOMES un rectangle del fons 'name' (per restaurar una zona que un menu
+ * hi ha tapat, sense repintar tota la pantalla). Retorna els ms emprats. */
+uint32_t drawRegion(const char* name, int x, int y, int w, int h);
+
 /* Diagnostica: mesura per separat el temps de lectura de la SD i el de push a
  * pantalla per a un fons complet (mateix buffer). Ho escriu pel port serie. */
 bool bench(const char* name);

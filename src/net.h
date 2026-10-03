@@ -33,6 +33,20 @@ struct Weather {
     uint8_t bgIndex;        /* fons weather_NN suggerit per aquest temps */
 };
 
+/* Camps d'una xarxa WiFi trobada amb l'escaneig. */
+struct Ap {
+    char    ssid[33];
+    int8_t  rssi;
+    bool    secure;         /* te contrasenya (no es una xarxa oberta) */
+};
+
+/* Escaneig de xarxes: el fa la tasca de xarxa (no bloqueja la UI). */
+void     startScan();
+bool     scanRunning();
+bool     scanDone();
+uint8_t  scanCount();
+Ap       scanAp(uint8_t index);
+
 /* Arrenca la tasca de xarxa. No bloqueja (torna de seguida). */
 void begin();
 

@@ -118,6 +118,78 @@ uint32_t drawFull(const char* name)
     return gStatus.lastMs;
 }
 
+uint32_t drawRegion(const char* name, int x, int y, int w, int h)
+{
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    const uint16_t W = bgs.width;
+    const uint16_t H = bgs.height;
+
+    gStatus.lastOk = false;
+    gStatus.lastMs = 0;
+
+    if (gBand == nullptr || W == 0 || H == 0) {
+        return 0;
+    }
+
+    if (x < 0) { w += x; x = 0; }
+    if (y < 0) { h += y; y = 0; }
+    if (x + w > static_cast<int>(W)) { w = static_cast<int>(W) - x; }
+    if (y + h > static_cast<int>(H)) { h = static_cast<int>(H) - y; }
+    if (w <= 0 || h <= 0) {
+        return 0;
+    }
+
+    char path[kPathLen];
+    snprintf(path, sizeof(path), "/backgrounds/%s.bin", name);
+    File f = SD.open(path, FILE_READ);
+    if (!f) {
+        Serial.printf("[BG] no s'ha pogut obrir %s\n", path);
+        return 0;
+    }
+    if (static_cast<uint32_t>(f.size()) != static_cast<uint32_t>(W) * H * 2u) {
+        Serial.printf("[BG] mida incorrecta a %s\n", path);
+        f.close();
+        return 0;
+    }
+
+    const size_t rowBytes = static_cast<size_t>(w) * 2u;
+    if (rowBytes * BG_BAND_LINES > static_cast<size_t>(W) * BG_BAND_LINES * 2u) {
+        f.close();
+        return 0;
+    }
+
+    TFT_eSPI& t = Display::driver();
+    const uint32_t t0 = millis();
+    bool ok = true;
+
+    t.startWrite();
+    for (int r = 0; r < h && ok; r += BG_BAND_LINES) {
+        const int lines = (h - r > BG_BAND_LINES) ? BG_BAND_LINES : (h - r);
+        uint8_t* p = gBand;
+        for (int i = 0; i < lines; ++i) {
+            const uint32_t off =
+                (static_cast<uint32_t>(y + r + i) * W + static_cast<uint32_t>(x)) * 2u;
+            if (!f.seek(off) || f.read(p, rowBytes) != rowBytes) {
+                ok = false;
+                break;
+            }
+            p += rowBytes;
+        }
+        if (!ok) {
+            break;
+        }
+        t.setAddrWindow(x, y + r, w, lines);
+        t.pushPixels(reinterpret_cast<uint16_t*>(gBand),
+                     static_cast<uint32_t>(w) * static_cast<uint32_t>(lines));
+    }
+    t.endWrite();
+    f.close();
+
+    gStatus.lastMs = millis() - t0;
+    gStatus.lastOk = ok;
+    return gStatus.lastMs;
+}
+
 bool bench(const char* name)
 {
     if (gBand == nullptr) {

@@ -193,6 +193,36 @@ void setTheme(uint8_t index)
     invalidate();
 }
 
+uint16_t colorPanelBg()
+{
+    return th().panelBg;
+}
+
+uint16_t colorPanelEdge()
+{
+    return th().panelEdge;
+}
+
+uint16_t colorAccent()
+{
+    return th().accent;
+}
+
+uint16_t colorTrack()
+{
+    return th().barTrack;
+}
+
+uint16_t colorClose()
+{
+    return th().close;
+}
+
+uint16_t colorRow(uint8_t index)
+{
+    return th().row[index & 3u];
+}
+
 void drawHud(const Hud& hud)
 {
     if (gHudDrawn && gLastHud.timeValid == hud.timeValid && gLastHud.hour == hud.hour &&
@@ -238,13 +268,25 @@ void drawHud(const Hud& hud)
         t.drawString("--", SCREEN_W / 2, UI_HUD_TOP + UI_HUD_H / 2);
     }
 
-    /* WiFi (dreta): 3 barres d'intensitat. */
-    const int wx = SCREEN_W - 26;
+    /* WiFi (dreta, abans del boto de menu): 3 barres d'intensitat. */
+    const int wx = SCREEN_W - 78;
     const int wy = UI_HUD_TOP + UI_HUD_H - 9;
-    const uint16_t wc = hud.wifi ? TFT_GREEN : kDim;
+    const uint16_t wc = hud.wifi ? TFT_GREEN : 0x39E7;
     for (int i = 0; i < 3; ++i) {
         const int bh = 5 + i * 5;
         t.fillRect(wx + i * 7, wy - bh, 5, bh, wc);
+    }
+
+    /* Boto de menu (dreta): 3 ratlles sobre fons destacat. */
+    const int mbx = SCREEN_W - 42;
+    const int mby = UI_HUD_TOP + 2;
+    const int mbw = 38;
+    const int mbh = UI_HUD_H - 4;
+    t.fillRoundRect(mbx, mby, mbw, mbh, 5, th().accent);
+    const int mbcx = mbx + mbw / 2;
+    const int mbcy = mby + mbh / 2;
+    for (int i = -1; i <= 1; ++i) {
+        t.fillRect(mbcx - 9, mbcy + i * 6 - 1, 18, 2, TFT_WHITE);
     }
 }
 
@@ -411,6 +453,9 @@ Zone hitTest(int16_t x, int16_t y, bool menuOpen)
     }
 
     if (y < UI_HUD_H) {
+        if (x >= SCREEN_W - 46) {
+            return Zone::HudMenu;
+        }
         return (x < 90) ? Zone::HudClock : Zone::HudOther;
     }
 

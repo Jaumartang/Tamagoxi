@@ -1,0 +1,4 @@
+# Tanca el panell d'Ajustos i comprova que es restaura la pantalla
+tap 160 440
+wait 4
+log

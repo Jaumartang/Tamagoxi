@@ -5,7 +5,34 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 6** — xarxa: WiFi, hora del NTP i temperatura/meteo d'Open-Meteo.
+> Estat actual: **Fase 6.5** — xarxa (WiFi, NTP i meteo) + menú de dalt i panell de WiFi amb teclat.
+
+## Menús i panells (Fase 6.5) — `src/ui_panels.*`
+
+El HUD té un **botó de ratlles** (a la dreta) que obre un desplegable:
+
+| Opció | Què fa |
+|---|---|
+| **WiFi** | Panell complet de xarxes (vegeu més avall) |
+| **Jocs** | Properament: llista dels jocs que vindran |
+| **Ajustos** | Tema de colors, fons de la pantalla i quants fons té la targeta |
+| **Sobre** | Xip, memòria, temps encesa, necessitats, WiFi i meteo |
+
+Mentre hi ha un panell obert la mascota queda congelada (perquè res no repinti a
+sobre del panell). En tancar-lo es restaura la pantalla: només la zona tapada si
+és el desplegable, la pantalla sencera si és un panell gran.
+
+### Panell de WiFi
+- **Llista de xarxes** amb barres de senyal (color segons la potència), un
+  **cadenat** si tenen contrasenya (o la paraula "oberta" si no) i fletxes per
+  desplaçar-se. A dalt, l'estat actual (a quina xarxa estàs i la IP).
+- **Cerca xarxes** refresca la llista. L'escaneig el fa la **tasca de xarxa**,
+  així que la mascota i la UI no s'encallen mai.
+- Tocar una xarxa obre el **teclat en pantalla**: lletres (amb `Maj`),
+  `123` per números i símbols, `Espai`, esborrar, mostrar/amagar la
+  contrasenya, esborrar-ho tot i **Connecta** (amb barra de progrés mentre
+  connecta i el resultat amb la IP o l'error).
+- Si la xarxa és **oberta**, connecta directament sense demanar res.
 
 ## Xarxa i meteo (Fase 6) — `src/net.*`
 
@@ -215,6 +242,7 @@ En arrencar:
 | `net` | Estat de la xarxa: WiFi, hora del NTP, ubicació i meteo |
 | `meteo` | Refresca la meteo ara mateix |
 | `geo [lat lon]` | Consulta o canvia la ubicació de la meteo (es desa) |
+| `tap <x> <y>` | (proves) Injecta un toc a la pantalla sense fer servir el dit |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |
@@ -228,6 +256,15 @@ En arrencar:
 > posar `Display::setBacklight(0)` abans de pintar el fons per franges i
 > `Display::setBacklight(100)` quan tot el fons ja és a la pantalla. Ho demostra
 > `runLoadDemo()` / la comanda `loaddemo`.
+
+## Eines de desenvolupament (`tools/`)
+
+- **`shot_decode.py`** — captura la pantalla pel port sèrie (`shot`) i desa un PNG.
+  Amb `--region x y w h --scale n` per fer zooms d'una zona.
+- **`seq.py`** — envia una seqüència de tocs i comandes des d'un fitxer `.seq`
+  (per provar la UI sense dit). Exemples: `tools/type_test.seq`, `tools/net_test.seq`.
+- **`validate_sd.py`** — comprova que la targeta SD tingui tots els actius i les
+  mides correctes.
 
 ## Resolució de problemes
 

@@ -31,6 +31,7 @@ Requisits: pyserial i Pillow  (pip3 install pyserial Pillow)
 """
 
 import argparse
+import re
 import sys
 import time
 
@@ -127,10 +128,22 @@ class Device:
                 parts = text.split()
                 if len(parts) < 3:
                     continue
-                row = int(parts[1])
-                if row not in bands:
-                    bands[row] = bytearray()
-                bands[row] += bytes.fromhex(parts[2])
+                try:
+                    row = int(parts[1])
+                except ValueError:
+                    continue
+                # La tasca de xarxa pot escriure logs pel mateix port: ens
+                # quedem nomes amb la tirada hexadecimal inicial de la linia.
+                match = re.match(r"[0-9A-Fa-f]+", parts[2])
+                if not match:
+                    continue
+                hexstr = match.group(0)
+                if len(hexstr) % 2:
+                    hexstr = hexstr[:-1]
+                if not hexstr:
+                    continue
+                bands.setdefault(row, bytearray())
+                bands[row] += bytes.fromhex(hexstr)
 
         if not started:
             raise RuntimeError("el dispositiu no ha respost a 'shot'")

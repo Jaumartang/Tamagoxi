@@ -1,0 +1,25 @@
+# Teclat: obre WiFi, tria la primera xarxa i escriu "Ba1 casa"
+cmd home
+wait 3
+tap 297 14
+wait 2
+tap 200 54
+wait 2
+wait 8
+log
+tap 150 106
+wait 2
+log
+tap 28 406
+tap 191 406
+tap 36 358
+tap 28 454
+tap 20 310
+tap 28 454
+tap 135 454
+tap 129 406
+tap 36 358
+tap 67 358
+tap 36 358
+wait 1
+log
