@@ -641,13 +641,90 @@ void drawSdScreen()
     t.setTextColor(TFT_WHITE, TFT_BLACK);
 }
 
+/* --- Captura de pantalla pel port serie (diagnostic) ---------------------
+ * Protocol:  SHOT BEGIN x y w h  /  SHOT <fila> <hex>  /  SHOT END w h
+ * Es llegeix el panell ST7796S amb readRect (MISO al GPIO12) i s'envia en hex.
+ * Reconstruccio al PC: tools/shot_decode.py */
+constexpr uint16_t kShotMaxW = 320;
+constexpr uint16_t kShotBandRows = 6;    /* 320*6*2 = 3840 B per lectura */
+constexpr uint16_t kShotHexBytes = 96;   /* bytes per linia de text */
+uint16_t gShotBuf[kShotMaxW * kShotBandRows];
+
+void cmdShot(char* arg)
+{
+    int x = 0;
+    int y = 0;
+    int w = SCREEN_W;
+    int h = SCREEN_H;
+    if (arg != nullptr && sscanf(arg, "%d %d %d %d", &x, &y, &w, &h) != 4) {
+        Serial.println(F("[CON] us: shot [x y w h]"));
+        return;
+    }
+    if (x < 0) { x = 0; }
+    if (y < 0) { y = 0; }
+    if (x >= SCREEN_W || y >= SCREEN_H) {
+        Serial.println(F("[CON] fora de pantalla"));
+        return;
+    }
+    if (x + w > SCREEN_W) { w = SCREEN_W - x; }
+    if (y + h > SCREEN_H) { h = SCREEN_H - y; }
+    if (w > kShotMaxW) { w = kShotMaxW; }
+
+    static const char kHex[] = "0123456789abcdef";
+    char line[kShotHexBytes * 2 + 1];
+    TFT_eSPI& t = Display::driver();
+
+    Serial.printf("SHOT BEGIN %d %d %d %d\n", x, y, w, h);
+    for (int row = 0; row < h; row += kShotBandRows) {
+        int rows = kShotBandRows;
+        if (row + rows > h) { rows = h - row; }
+        t.readRect(x, y + row, w, rows, gShotBuf);
+
+        const uint8_t* raw = reinterpret_cast<const uint8_t*>(gShotBuf);
+        const size_t total = static_cast<size_t>(w) * rows * 2u;
+        for (size_t off = 0; off < total; off += kShotHexBytes) {
+            const size_t chunk = ((total - off) < kShotHexBytes) ? (total - off) : kShotHexBytes;
+            for (size_t i = 0; i < chunk; ++i) {
+                const uint8_t b = raw[off + i];
+                line[i * 2] = kHex[b >> 4];
+                line[i * 2 + 1] = kHex[b & 0x0F];
+            }
+            line[chunk * 2] = '\0';
+            Serial.print("SHOT ");
+            Serial.print(row);
+            Serial.print(' ');
+            Serial.println(line);
+        }
+    }
+    Serial.printf("SHOT END %d %d\n", w, h);
+}
+
+void cmdBaud(char* arg)
+{
+    if (arg == nullptr) {
+        Serial.printf("[CON] baud %lu\n", static_cast<unsigned long>(SERIAL_BAUD));
+        return;
+    }
+    const uint32_t b = static_cast<uint32_t>(strtoul(arg, nullptr, 10));
+    if (b < 9600 || b > 921600) {
+        Serial.println(F("[CON] baud invalid"));
+        return;
+    }
+    Serial.println(F("[CON] BAUD OK"));
+    Serial.flush();
+    delay(50);
+    Serial.begin(b);
+    Serial.printf("[CON] baud %lu\n", static_cast<unsigned long>(b));
+}
+
 /* --- Consola serie -------------------------------------------------------- */
 void printHelp()
 {
     Serial.println(F("[CON] comandes: help | info | bl <0-100> | bltest | loaddemo "
                      "| cal | touch | colortest | tth <n> | sd | lssd | bg <name|next|N> "
                      "| pet [bg] | anim <NAME|next> | petscale <1-3> | petpos <x> <y>|center "
-                     "| petreset | home | act <feed|play|sleep|heal|pet>"));
+                     "| petreset | home | act <feed|play|sleep|heal|pet> "
+                     "| shot [x y w h] | baud <n>"));
 }
 
 void printInfo()
@@ -826,6 +903,10 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "bench") == 0) {
         const char* which = (arg != nullptr) ? arg : "weather_00";
         BgRenderer::bench(which);
+    } else if (strcmp(cmd, "shot") == 0) {
+        cmdShot(arg);
+    } else if (strcmp(cmd, "baud") == 0) {
+        cmdBaud(arg);
     } else if (strcmp(cmd, "tth") == 0) {
         if (arg != nullptr) {
             Touch::setPressureThreshold(static_cast<uint16_t>(atoi(arg)));
