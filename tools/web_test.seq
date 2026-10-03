@@ -1,0 +1,16 @@
+# Prova del servidor web: punt d'acces + autoprova + pagina pel port serie
+cmd ap
+wait 8
+log
+cmd webtest
+wait 10
+log
+cmd webdump
+wait 10
+log
+cmd web
+wait 1
+log
+cmd ap off
+wait 3
+log

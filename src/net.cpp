@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "tg_config.h"
+#include "webui.h"
 
 #if __has_include(<secrets.h>)
 #include <secrets.h>
@@ -33,6 +34,7 @@ volatile bool       gTimeSynced  = false;
 volatile uint32_t   gEpoch       = 0;
 volatile bool       gRefresh     = false;
 volatile bool       gEnabled     = true;
+volatile bool       gApMode      = false;   /* punt d'acces propi en marxa */
 volatile uint32_t   gWeatherMs   = 0;      /* millis() de les dades valides */
 uint32_t            gLastTryMs   = 0;
 
@@ -347,6 +349,9 @@ void netTask(void*)
         }
 
         if (!gEnabled) {
+            if (WebUI::active()) {
+                WebUI::stop();          /* sense WiFi no te sentit */
+            }
             if (WiFi.status() == WL_CONNECTED || WiFi.getMode() != WIFI_OFF) {
                 WiFi.disconnect(true);
                 WiFi.mode(WIFI_OFF);
@@ -357,7 +362,20 @@ void netTask(void*)
             continue;
         }
 
+        /* Punt d'acces propi: nomes cal servir la pagina web. */
+        if (gApMode) {
+            if (!WebUI::active()) {
+                WebUI::begin();
+            }
+            WebUI::loop();
+            vTaskDelay(25 / portTICK_PERIOD_MS);
+            continue;
+        }
+
         if (WiFi.status() != WL_CONNECTED) {
+            if (WebUI::active()) {
+                WebUI::stop();          /* la IP se'n va: parem el servidor */
+            }
             /* Marge per muntar el WiFi (~45 kB). Amb el Bluetooth engegat la
              * memoria va molt justa: val mes quedar-se sense xarxa que petar. */
             if (gSsid[0] != '\0' && ESP.getFreeHeap() < 55000) {
@@ -385,7 +403,16 @@ void netTask(void*)
             fetchWeather();
         }
 
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
+        /* Servidor web: pujada de fitxers a la SD des del navegador. */
+        if (!WebUI::active()) {
+            WebUI::begin();
+        }
+        if (WebUI::active()) {
+            WebUI::loop();
+            vTaskDelay(25 / portTICK_PERIOD_MS);   /* aten les peticions tot seguit */
+        } else {
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+        }
     }
 }
 
@@ -612,6 +639,52 @@ void startScan()
     if (gTask != nullptr) {
         xTaskNotifyGive(gTask);
     }
+}
+
+/* --- Punt d'acces propi (per pujar fitxers sense router) ------------------- */
+
+bool startAccessPoint(const char* ssid, const char* pass)
+{
+    if (gApMode) {
+        return true;
+    }
+    if (ssid == nullptr || ssid[0] == '\0') {
+        ssid = "Tamagoxi";
+    }
+    const bool withPass = (pass != nullptr && strlen(pass) >= 8);
+    gEnabled = true;                 /* el Bluetooth pot haver-lo aturat */
+
+    WiFi.mode(WIFI_AP);
+    const bool ok = WiFi.softAP(ssid, withPass ? pass : nullptr);
+    gApMode = ok;
+    gState  = ok ? State::Connected : State::Failed;
+    if (ok) {
+        Serial.printf("[NET] punt d'acces \"%s\" (%s): puja fitxers a http://192.168.4.1/\n",
+                      ssid, withPass ? "amb contrasenya" : "obert");
+    } else {
+        Serial.println(F("[NET] no s'ha pogut crear el punt d'acces"));
+    }
+    return ok;
+}
+
+void stopAccessPoint()
+{
+    if (!gApMode) {
+        return;
+    }
+    WiFi.softAPdisconnect(true);
+    WiFi.mode(WIFI_OFF);
+    gApMode = false;
+    gState  = State::NoCredentials;
+    if (WebUI::active()) {
+        WebUI::stop();
+    }
+    Serial.println(F("[NET] punt d'acces aturat"));
+}
+
+bool apMode()
+{
+    return gApMode;
 }
 
 bool scanRunning()

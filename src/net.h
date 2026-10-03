@@ -55,6 +55,12 @@ bool enabled();
 /* Sonda de memoria: quanta RAM es menja muntar el WiFi (no desa res). */
 void probeCost();
 
+/* Punt d'acces propi (per pujar fitxers a la SD sense router):
+ * crea la xarxa "Tamagoxi" i el servidor web queda a http://192.168.4.1/ */
+bool startAccessPoint(const char* ssid, const char* pass);
+void stopAccessPoint();
+bool apMode();
+
 /* Arrenca la tasca de xarxa. No bloqueja (torna de seguida). */
 void begin();
 

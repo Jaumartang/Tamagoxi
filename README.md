@@ -34,6 +34,28 @@ de l'ESP32) i connector per a altaveu extern. El so viu en una **tasca pròpia**
   comprovar que se sent, sense necessitat d'ordinador.
 - **`beep [freq ms vol]`**: to de prova directe (per validar l'altaveu).
 
+## Pujar fitxers per WiFi (Fase 8) — `src/webui.*`
+
+La placa porta un **servidor web**: puja fitxers a la SD des del navegador del
+mòbil o de l'ordinador (música, fons, mascotes), veu què hi ha i els esborra.
+
+- **Com s'hi arriba**:
+  - Amb el WiFi de casa (`wifi <ssid> <contrasenya>`): **http://tamagoxi.local**
+    (o la IP que surt a la comanda `net`).
+  - Sense router: `ap` crea la xarxa **Tamagoxi** (oberta) i el servidor queda a
+    **http://192.168.4.1**; t'hi connectes amb el mòbil. `ap off` el para.
+    Amb contrasenya: `ap NomXarxa laMevaClau` (mínim 8 caràcters).
+- **Què s'hi pot fer**: pujar un o més fitxers a `/music`, `/backgrounds`,
+  `/pets` o l'arrel; llistar què hi ha i quant ocupa; esborrar; i veure l'espai
+  lliure de la targeta.
+- **En pujar música** la consola la rescanneja sola (apareix al panell de Música).
+- **Proves sense navegador**: `webtest` (la placa es visita a si mateixa i hi
+  puja un fitxer de prova) i `webdump` (envia la pàgina pel port sèrie).
+- **Memòria**: el servidor només arrenca si hi ha ≥25 kB lliures. Quan s'encén el
+  Bluetooth el servidor s'atura sol (i torna quan el Bluetooth s'apaga).
+- **Seguretat**: no demana contrasenya; pensat per a una xarxa de casa. Només es
+  pot escriure dins les carpetes de la llista (mai amb rutes `..`).
+
 ## Menús i panells (Fase 6.5) — `src/ui_panels.*`
 
 El HUD té un **botó de ratlles** (a la dreta) que obre un desplegable:
@@ -275,6 +297,9 @@ En arrencar:
 | `beep [freq ms vol]` | To de prova per validar l'altaveu |
 | `audio [dac\|bt\|vol n]` | Sortida d'àudio (DAC de la placa / Bluetooth) i volum |
 | `bt [source\|sink\|off]` | Bluetooth: emissor (auriculars) / altaveu (mòbil) / apagar |
+| `web [on\|off\|status]` | Servidor web per pujar/esborrar fitxers a la SD |
+| `ap [off] [ssid] [pass]` | Punt d'accés propi: http://192.168.4.1 |
+| `webtest` / `webdump` | Autoprova del servidor web / envia la pàgina pel sèrie |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |

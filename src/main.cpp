@@ -15,6 +15,7 @@
 #include "touch.h"
 #include "ui.h"
 #include "ui_panels.h"
+#include "webui.h"
 
 /*
  * main.cpp - Tamagoxi v2 (Tamagotchi gegant per a la Noa)
@@ -890,7 +891,7 @@ void printHelp()
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
                      "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s> "
                      "| theme [n] | homebg [nom|auto] | wifi [ssid pass] | net | meteo "
-                     "| geo <lat> <lon> | tap <x> <y> | beep [freq ms vol] | audio [dac|bt|vol n] | bt [source|sink|off]"));
+                     "| geo <lat> <lon> | tap <x> <y> | beep [freq ms vol] | audio [dac|bt|vol n] | bt [source|sink|off] | web [on|off] | ap [off]"));
 }
 
 void printInfo()
@@ -1205,6 +1206,32 @@ void handleCommand(char* cmd)
         if (Audio::writeTestWav(name, static_cast<uint16_t>(secs))) {
             Audio::scan();
         }
+    } else if (strcmp(cmd, "webtest") == 0) {
+        WebUI::requestSelfTest(false);
+    } else if (strcmp(cmd, "webdump") == 0) {
+        WebUI::requestSelfTest(true);
+    } else if (strcmp(cmd, "web") == 0) {
+        if (arg == nullptr || strcmp(arg, "status") == 0) {
+            WebUI::printStatus();
+            Net::printStatus();
+        } else if (strcmp(arg, "on") == 0) {
+            WebUI::begin();
+        } else if (strcmp(arg, "off") == 0) {
+            WebUI::stop();
+        } else {
+            Serial.println(F("[WEB] us: web [on|off|status]"));
+        }
+    } else if (strcmp(cmd, "ap") == 0) {
+        if (arg == nullptr) {
+            Net::startAccessPoint("Tamagoxi", nullptr);
+        } else if (strcmp(arg, "off") == 0) {
+            Net::stopAccessPoint();
+        } else {
+            char ssid[33] = "Tamagoxi";
+            char pass[65] = {0};
+            sscanf(arg, "%32s %64s", ssid, pass);
+            Net::startAccessPoint(ssid, pass[0] != '\0' ? pass : nullptr);
+        }
     } else if (strcmp(cmd, "wifiprobe") == 0) {
         Net::probeCost();
     } else if (strcmp(cmd, "bt") == 0) {
@@ -1382,6 +1409,13 @@ void setup()
 void loop()
 {
     pollSerial();
+
+    /* Si s'ha pujat musica nova pel navegador, refresquem la llista d'aquí (que
+     * es qui mana sobre el reproductor) i no des de la tasca de xarxa. */
+    if (WebUI::takeUploaded()) {
+        Audio::scan();
+    }
+
     Touch::update();
 
     const bool pressed = Touch::isPressed();

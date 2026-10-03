@@ -1,0 +1,11 @@
+# Captura la pagina web pel port serie (per revisar-la)
+cmd tmon 0
+wait 2
+cmd ap
+wait 8
+cmd webdump
+wait 6
+cmd ap off
+wait 3
+cmd tmon 5
+wait 1
