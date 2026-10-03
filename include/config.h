@@ -73,7 +73,7 @@ static constexpr uint32_t BG_GALLERY_INTERVAL_MS = 5000;
 /* Escala entera de l'sprite (128 px -> 128*PET_SCALE px). Valors 1..3. */
 static constexpr uint8_t PET_SCALE = 2;
 /* Fila (y) on comenca el rectangle de la mascota. X = centrat + PET_OFFSET_X. */
-static constexpr int PET_AREA_TOP = 44;
+static constexpr int PET_AREA_TOP = 104;
 static constexpr int PET_OFFSET_X = 0;
 /* Galeria d'animacions: temps entre animacio i animacio. */
 static constexpr uint32_t PET_ANIM_SWITCH_MS = 6000;
@@ -81,25 +81,23 @@ static constexpr uint32_t PET_ANIM_SWITCH_MS = 6000;
 static constexpr const char* PET_TEST_BG = "weather_00";
 
 /* --- UI (Fase 4) ---------------------------------------------------------- */
-/* Franja del HUD superior (hora, temps, WiFi). */
+/* HUD compacte a dalt (28 px). */
 static constexpr int UI_HUD_TOP = 0;
-static constexpr int UI_HUD_H   = 40;
+static constexpr int UI_HUD_H   = 28;
 
-/* Zona inferior (part baixa de la pantalla): panell de barres a l'esquerra i
- * boto MENU a la dreta. El menu desplegable tapa tota aquesta zona. */
-static constexpr int UI_BARS_TOP     = 300;
+/* Franja inferior compacta (44 px): barres compactes (esquerra) + boto MENU
+ * (dreta). El menu d'accions es desplega DINS la mateixa franja.
+ * HUD + franja = 72 px = 15% de 480. */
+static constexpr int UI_BARS_TOP     = 436;
 static constexpr int UI_BARS_BOT     = 480;
-static constexpr int UI_BARS_PANEL_R = 224;   /* fi del panell de barres */
+static constexpr int UI_BARS_PANEL_R = 232;   /* limit de barres/botons d'accio */
 
-static constexpr int UI_MENU_BTN_L   = 224;   /* inici del boto MENU */
-static constexpr int UI_MENU_BTN_TOP = 300;
+static constexpr int UI_MENU_BTN_L   = 232;   /* boto MENU / tancar */
+static constexpr int UI_MENU_BTN_TOP = 436;
 static constexpr int UI_MENU_BTN_BOT = 480;
 
-/* Panell del menu desplegable (mateixa zona que barres + boto). */
-static constexpr int UI_MENU_TOP    = 300;
-static constexpr int UI_MENU_BOT    = 480;
-static constexpr int UI_MENU_HEADER = 26;
-static constexpr int UI_MENU_STRIP  = 26;     /* barres compactes alternatives */
+/* Franja de barres compactes quan el menu es obert (a sota dels botons). */
+static constexpr int UI_MENU_STRIP  = 8;
 
 /* Premuda llarga del rellotge del HUD per al menu d'ajustos (ms). */
 static constexpr uint32_t UI_LONGPRESS_MS = 2000;
