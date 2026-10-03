@@ -10,11 +10,18 @@
 #include "pins.h"
 #include "sprite_renderer.h"
 
+#include <esp_gap_bt_api.h>
+#include <esp_a2dp_api.h>
+
 #include "AudioTools.h"
 #include "AudioTools/AudioCodecs/CodecMP3Helix.h"
 #include "AudioTools/AudioCodecs/CodecWAV.h"
 #if AUDIO_BT
 #include "AudioTools/Communication/A2DPStream.h"
+/* El callback de descobriment de la biblioteca: ens hi encadenem per poder
+ * llistar els dispositius que es troben sense trencar-li res. */
+extern "C" void ccall_app_gap_callback(esp_bt_gap_cb_event_t event,
+                                       esp_bt_gap_cb_param_t* param);
 #endif
 
 namespace {
@@ -311,6 +318,113 @@ void outWrite(const uint16_t* samples, size_t count)
     dacWrite(samples, count);
 }
 
+/* --- Cerca de dispositius Bluetooth (auriculars, altaveus) ----------------- */
+
+namespace {
+
+Audio::BtDevice  gDevices[Audio::kBtMaxDevices];
+volatile uint8_t gDeviceCount = 0;
+volatile bool    gScanning    = false;
+bool             gGapChained  = false;
+int8_t           gConnectedIdx = -1;
+
+/* Treu el nom, el senyal i la classe d'un aparell trobat i, si es d'audio
+ * (auriculars, altaveu...), el desa a la llista. */
+void collectDevice(esp_bt_gap_cb_param_t* param)
+{
+    const esp_bt_gap_dev_prop_t* propName = nullptr;
+    const esp_bt_gap_dev_prop_t* propRssi = nullptr;
+    const esp_bt_gap_dev_prop_t* propCod  = nullptr;
+    for (int i = 0; i < param->disc_res.num_prop; ++i) {
+        const esp_bt_gap_dev_prop_t* p = &param->disc_res.prop[i];
+        if (p->type == ESP_BT_GAP_DEV_PROP_BDNAME) {
+            propName = p;
+        } else if (p->type == ESP_BT_GAP_DEV_PROP_RSSI) {
+            propRssi = p;
+        } else if (p->type == ESP_BT_GAP_DEV_PROP_COD) {
+            propCod = p;
+        }
+    }
+
+    /* Nomes aparells d'audio: classe major 0x04 (Audio/Video). */
+    if (propCod == nullptr) {
+        return;
+    }
+    const uint32_t cod = *reinterpret_cast<const uint32_t*>(propCod->val);
+    if (((cod >> 8) & 0x1Fu) != 0x04u) {
+        return;
+    }
+
+    for (uint8_t i = 0; i < gDeviceCount; ++i) {          /* ja el teniem? */
+        if (memcmp(gDevices[i].addr, param->disc_res.bda, 6) == 0) {
+            return;
+        }
+    }
+    if (gDeviceCount >= Audio::kBtMaxDevices) {
+        return;
+    }
+
+    Audio::BtDevice& d = gDevices[gDeviceCount];
+    if (propName != nullptr && propName->len > 0) {
+        const size_t n = (propName->len < static_cast<int>(Audio::kBtNameMax - 1))
+                             ? static_cast<size_t>(propName->len)
+                             : (Audio::kBtNameMax - 1);
+        memcpy(d.name, propName->val, n);
+        d.name[n] = '\0';
+    } else {
+        /* Sense nom (alguns auriculars no el donen a la primera): l'adreça. */
+        const uint8_t* a = param->disc_res.bda;
+        snprintf(d.name, sizeof(d.name), "Aparell %02X:%02X:%02X", a[3], a[4], a[5]);
+    }
+    memcpy(d.addr, param->disc_res.bda, 6);
+    d.rssi = (propRssi != nullptr) ? *reinterpret_cast<const int8_t*>(propRssi->val) : 0;
+    d.connected = false;
+    ++gDeviceCount;
+    Serial.printf("[BT] trobat: %s (%d dBm)\n", d.name, static_cast<int>(d.rssi));
+
+    /* L'EIR no sempre porta el nom: el demanem (com fa el mobil). */
+    if (propName == nullptr) {
+        esp_bt_gap_read_remote_name(d.addr);
+    }
+}
+
+/* El nom ha arribat: el posem a la fila que li toca. */
+void setDeviceName(const uint8_t* bda, const char* nm)
+{
+    if (nm == nullptr || nm[0] == '\0') {
+        return;
+    }
+    for (uint8_t i = 0; i < gDeviceCount; ++i) {
+        if (memcmp(gDevices[i].addr, bda, 6) == 0) {
+            /* El buffer de l'IDF pot no estar tancat amb '\0': copiem amb mida. */
+            const size_t n = strnlen(nm, Audio::kBtNameMax - 1);
+            memcpy(gDevices[i].name, nm, n);
+            gDevices[i].name[n] = '\0';
+            Serial.printf("[BT] nom: %s\n", gDevices[i].name);
+            return;
+        }
+    }
+}
+
+/* Ens posem al davant del callback de la biblioteca i li ho passem tot. */
+void gapCallback(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param)
+{
+    if (event == ESP_BT_GAP_DISC_RES_EVT) {
+        collectDevice(param);
+    } else if (event == ESP_BT_GAP_READ_REMOTE_NAME_EVT) {
+        setDeviceName(param->read_rmt_name.bda,
+                      reinterpret_cast<const char*>(param->read_rmt_name.rmt_name));
+    } else if (event == ESP_BT_GAP_DISC_STATE_CHANGED_EVT
+               && param->disc_st_chg.state == ESP_BT_GAP_DISCOVERY_STOPPED) {
+        gScanning = false;
+        Serial.printf("[BT] cerca acabada: %u aparells\n",
+                      static_cast<unsigned>(gDeviceCount));
+    }
+    ccall_app_gap_callback(event, param);        /* la biblioteca, com sempre */
+}
+
+}  // namespace
+
 bool endsWith(const char* name, const char* ext)
 {
     const size_t n = strlen(name);
@@ -470,6 +584,85 @@ void playerTask(void*)
 }  // namespace
 
 namespace Audio {
+
+/* --- Cerca i enllacament de dispositius (auriculars, altaveus) ------------- */
+
+void btStartScan()
+{
+#if AUDIO_BT
+    if (!gBtStarted) {
+        Serial.println(F("[BT] primer encen el Bluetooth (bt source)"));
+        return;
+    }
+    if (!gGapChained) {
+        esp_bt_gap_register_callback(gapCallback);
+        gGapChained = true;
+    }
+    gDeviceCount = 0;
+    gScanning    = true;
+    const esp_err_t err = esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 0x08, 0);
+    Serial.printf("[BT] cercant aparells d'audio... (%s)\n", esp_err_to_name(err));
+    if (err != ESP_OK) {
+        gScanning = false;
+    }
+#else
+    Serial.println(F("[BT] Bluetooth no compilat en aquesta versio"));
+#endif
+}
+
+bool btScanning()
+{
+    return gScanning;
+}
+
+uint8_t btDeviceCount()
+{
+    return gDeviceCount;
+}
+
+const BtDevice* btDevice(uint8_t index)
+{
+    return (index < gDeviceCount) ? &gDevices[index] : nullptr;
+}
+
+bool btConnect(uint8_t index)
+{
+#if AUDIO_BT
+    if (!gBtStarted || index >= gDeviceCount) {
+        return false;
+    }
+    esp_bd_addr_t addr;
+    memcpy(addr, gDevices[index].addr, 6);
+    const esp_err_t err = esp_a2d_source_connect(addr);
+    Serial.printf("[BT] enllacant amb %s -> %s\n", gDevices[index].name,
+                  esp_err_to_name(err));
+    if (err == ESP_OK) {
+        if (gConnectedIdx >= 0) {
+            gDevices[gConnectedIdx].connected = false;
+        }
+        gConnectedIdx = static_cast<int8_t>(index);
+        gDevices[index].connected = true;
+    }
+    return err == ESP_OK;
+#else
+    (void)index;
+    return false;
+#endif
+}
+
+void btDisconnect()
+{
+#if AUDIO_BT
+    if (gBtStarted && gConnectedIdx >= 0) {
+        esp_bd_addr_t addr;
+        memcpy(addr, gDevices[gConnectedIdx].addr, 6);
+        esp_a2d_source_disconnect(addr);
+        gDevices[gConnectedIdx].connected = false;
+        gConnectedIdx = -1;
+        Serial.println(F("[BT] enllac desfet"));
+    }
+#endif
+}
 
 void begin()
 {

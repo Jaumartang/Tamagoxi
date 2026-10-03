@@ -789,9 +789,14 @@ void drawAbout()
 
 /* --- Panell de Bluetooth --------------------------------------------------- */
 
-constexpr int kBtBtnY1 = 310;
-constexpr int kBtBtnY2 = 380;
-constexpr int kBtBtnH  = 62;
+constexpr int kBtScanY    = 104;
+constexpr int kBtScanH    = 46;
+constexpr int kBtListY    = 158;
+constexpr int kBtRowH2    = 47;
+constexpr int kBtListRows = 4;
+constexpr int kBtBtnY1    = 350;
+constexpr int kBtBtnY2    = 412;
+constexpr int kBtBtnH     = 56;
 
 void drawBluetooth()
 {
@@ -801,61 +806,83 @@ void drawBluetooth()
 
     const Audio::BtMode mode = Audio::btMode();
     const bool on = (mode != Audio::BtMode::Off);
-    const bool btOut = (Audio::output() == Audio::Output::Bluetooth);
 
+    /* Mode i estat, en dues linies. */
     t.setTextDatum(ML_DATUM);
-    int y = 58;
-
     t.setTextFont(4);
     t.setTextColor(kText, Ui::colorPanelBg());
     t.drawString((mode == Audio::BtMode::Source) ? "Auriculars"
                  : ((mode == Audio::BtMode::Sink) ? "Altaveu" : "Apagat"),
-                 12, y);
-    y += 34;
+                 12, 58);
 
-    struct Line { const char* label; char value[44]; };
-    Line lines[5];
-    int n = 0;
-
-    snprintf(lines[n].value, sizeof(lines[n].value), "%s",
-             on ? (Audio::btConnected() ? "si" : "esperant connexio") : "-");
-    lines[n++].label = "Connectat";
-    snprintf(lines[n].value, sizeof(lines[n].value), "%s", Audio::btName());
-    lines[n++].label = "Nom";
-    snprintf(lines[n].value, sizeof(lines[n].value), "%s",
-             btOut ? "Bluetooth" : "placa (GPIO26)");
-    lines[n++].label = "Sortida";
-    snprintf(lines[n].value, sizeof(lines[n].value), "%s",
-             Audio::isPlaying() ? "sonant" : "-");
-    lines[n++].label = "Musica";
-    snprintf(lines[n].value, sizeof(lines[n].value), "%u kB lliures",
-             static_cast<unsigned>(ESP.getFreeHeap() / 1024));
-    lines[n++].label = "Memoria";
-
-    t.setTextFont(2);
-    for (int i = 0; i < n; ++i) {
-        t.setTextColor(kDimText, Ui::colorPanelBg());
-        t.drawString(lines[i].label, 12, y + 8);
-        t.setTextColor(kText, Ui::colorPanelBg());
-        t.setTextDatum(MR_DATUM);
-        t.drawString(lines[i].value, SCREEN_W - 12, y + 8);
-        t.setTextDatum(ML_DATUM);
-        y += 26;
-    }
-
-    /* Nota: que passa quan s'encen o s'apaga. */
-    const int ny = y + 8;
-    t.fillRoundRect(8, ny, SCREEN_W - 16, 62, 10, Ui::colorTrack());
-    t.setTextFont(1);
-    t.setTextColor(kText, Ui::colorTrack());
+    const Audio::BtDevice* peer = nullptr;
     if (on) {
-        t.drawString("Mentre dura, la mascota dorm i el WiFi s'atura", 16, ny + 14);
-        t.drawString("(aquest xip va just de memoria).", 16, ny + 30);
-        t.drawString("Apagar-lo reinicia la placa: tot torna en 3 s.", 16, ny + 46);
+        for (uint8_t i = 0; i < Audio::btDeviceCount(); ++i) {
+            const Audio::BtDevice* d = Audio::btDevice(i);
+            if (d != nullptr && d->connected) {
+                peer = d;
+                break;
+            }
+        }
+    }
+    char st[64];
+    if (!on) {
+        strlcpy(st, "Encen \"Auriculars\" per sentir-hi la musica", sizeof(st));
+    } else if (Audio::btConnected()) {
+        snprintf(st, sizeof(st), "enllacat amb %s", (peer != nullptr) ? peer->name : "?");
     } else {
-        t.drawString("Per sentir la musica als teus auriculars:", 16, ny + 14);
-        t.drawString("1. Encen \"Auriculars\" aqui.", 16, ny + 30);
-        t.drawString("2. Emparella \"Tamagoxi\" al mobil.", 16, ny + 46);
+        strlcpy(st, "cap aparell enllacat", sizeof(st));
+    }
+    t.setTextFont(2);
+    t.setTextColor(kDimText, Ui::colorPanelBg());
+    t.drawString(st, 12, 84);
+
+    /* Boto d'escanejar. */
+    char lbl[40];
+    if (Audio::btScanning()) {
+        snprintf(lbl, sizeof(lbl), "Cercant... (%u)",
+                 static_cast<unsigned>(Audio::btDeviceCount()));
+    } else {
+        strlcpy(lbl, "Escaneja aparells", sizeof(lbl));
+    }
+    drawButton(8, kBtScanY, SCREEN_W - 16, kBtScanH, lbl,
+               Audio::btScanning() ? kGood : Ui::colorRow(0));
+
+    /* Llista dels aparells trobats (toca'n un per enllacar-hi). */
+    const uint8_t count = Audio::btDeviceCount();
+    for (uint8_t i = 0; i < kBtListRows; ++i) {
+        const int ry = kBtListY + i * kBtRowH2;
+        if (i >= count) {
+            if (i == 0) {
+                t.setTextDatum(ML_DATUM);
+                t.setTextFont(1);
+                t.setTextColor(kDimText, Ui::colorPanelBg());
+                t.drawString(Audio::btScanning()
+                                 ? "Cercant aparells d'audio a prop..."
+                                 : "Toca \"Escaneja\" amb els auriculars encesos",
+                             16, ry + 14);
+            }
+            continue;
+        }
+        const Audio::BtDevice* d = Audio::btDevice(i);
+        if (d == nullptr) {
+            continue;
+        }
+        const uint16_t bg = d->connected ? kGood : Ui::colorTrack();
+        const int rh = kBtRowH2 - 6;
+        t.fillRoundRect(8, ry, SCREEN_W - 16, rh, 8, bg);
+        t.setTextDatum(ML_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(kText, bg);
+        t.drawString(d->name, 16, ry + rh / 2 - 7);
+        t.setTextFont(1);
+        t.drawString(d->connected ? "enllacat" : "toca per enllacar", 16, ry + rh / 2 + 9);
+        char rssi[12];
+        snprintf(rssi, sizeof(rssi), "%d", static_cast<int>(d->rssi));
+        t.setTextDatum(MR_DATUM);
+        t.setTextFont(2);
+        t.drawString(rssi, SCREEN_W - 16, ry + rh / 2);
+        t.setTextDatum(ML_DATUM);
     }
 
     /* Botons. */
@@ -1299,8 +1326,9 @@ void topMenuRect(int16_t& x, int16_t& y, int16_t& w, int16_t& h)
 void update(uint32_t nowMs)
 {
     if (gId == Id::Bluetooth) {
-        /* Refresca l'estat (connectat, memoria) de tant en tant. */
-        if (nowMs - gTimer >= 2000) {
+        /* Refresca l'estat (i la llista, mentre cerca) de tant en tant. */
+        const uint32_t period = Audio::btScanning() ? 600u : 2000u;
+        if (nowMs - gTimer >= period) {
             gTimer = nowMs;
             drawBluetooth();
         }
@@ -1381,6 +1409,27 @@ bool handleTap(int16_t x, int16_t y)
 
     /* --- Bluetooth --- */
     if (gId == Id::Bluetooth) {
+        /* Boto d'escanejar: encen l'emissor si cal i cerca aparells d'audio. */
+        if (y >= kBtScanY && y < kBtScanY + kBtScanH) {
+            if (Audio::btMode() != Audio::BtMode::Source) {
+                Audio::btSetMode(Audio::BtMode::Source);
+                Audio::setOutput(Audio::Output::Bluetooth);
+            }
+            if (Audio::btMode() == Audio::BtMode::Source) {
+                Audio::btStartScan();
+            }
+            drawBluetooth();
+            return true;
+        }
+        /* Llista d'aparells trobats: un toc enllaca amb aquell. */
+        if (y >= kBtListY && y < kBtListY + kBtListRows * kBtRowH2) {
+            const int row = (y - kBtListY) / kBtRowH2;
+            if (row >= 0 && row < static_cast<int>(Audio::btDeviceCount())) {
+                Audio::btConnect(static_cast<uint8_t>(row));
+                drawBluetooth();
+            }
+            return true;
+        }
         if (y >= kBtBtnY1 && y < kBtBtnY1 + kBtBtnH) {
             if (x >= 8 && x < 156) {          /* auriculars (emissor) */
                 Audio::btSetMode(Audio::BtMode::Source);

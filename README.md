@@ -16,9 +16,12 @@ de l'ESP32) i connector per a altaveu extern. El so viu en una **tasca pròpia**
 
 - **Sortida**: `audio dac` (altaveu de la placa) o `audio bt` (Bluetooth).
 - **Auriculars Bluetooth** 🎧: `bt source` encén l'**emissor A2DP** (la placa es
-  diu *Tamagoxi*): emparella-hi uns auriculars o un altaveu i toca la música; el
-  so hi va en comptes d'anar a l'altaveu de la placa. `bt sink` fa el contrari
-  (el mòbil hi envia la seva música) i `bt off` apaga el Bluetooth.
+  diu *Tamagoxi*). Amb el **panell de Bluetooth** (menú de dalt) es pot fer un
+  **escaneig dels aparells d'àudio** que hi ha a prop (auriculars, altaveus,
+  televisors...), veure'n el nom i el senyal, i **enllaçar-hi amb un toc**.
+  El mateix des del sèrie: `bt scan`, `bt list` i `bt connect <n>`.
+  `bt sink` fa el contrari (el mòbil hi envia la seva música) i `bt off` apaga el
+  Bluetooth.
   Com que la pila Bluetooth necessita ~90 kB i aquest xip **no té PSRAM**, quan
   s'encén: (1) la mascota deixa anar els seus buffers (es queda aturada) i
   (2) s'atura el WiFi (la ràdio no pot fer les dues coses alhora). En apagar-lo,
@@ -64,7 +67,7 @@ El HUD té un **botó de ratlles** (a la dreta) que obre un desplegable:
 |---|---|
 | **WiFi** | Panell complet de xarxes (vegeu més avall) |
 | **Música** | Reproductor: cançó actual, transport, volum i llista |
-| **Bluetooth** | Encén el so pels **auriculars** (emissor) o fa d'**altaveu**; tria la sortida (placa/Bluetooth) i l'apaga. Explica què passa en encendre'l (la mascota dorm i el WiFi s'atura) |
+| **Bluetooth** | **Escaneja els aparells d'àudio** que hi ha a prop (amb el nom i el senyal), enllaça-hi amb un toc, i encén/apaga el Bluetooth o tria la sortida (placa/Bluetooth) |
 | **Jocs** | Properament: llista dels jocs que vindran |
 | **Ajustos** | Tema de colors, fons de la pantalla i quants fons té la targeta |
 | **Sobre** | Xip, memòria, temps encesa, necessitats, WiFi i meteo |
@@ -299,6 +302,8 @@ En arrencar:
 | `beep [freq ms vol]` | To de prova per validar l'altaveu |
 | `audio [dac\|bt\|vol n]` | Sortida d'àudio (DAC de la placa / Bluetooth) i volum |
 | `bt [source\|sink\|off]` | Bluetooth: emissor (auriculars) / altaveu (mòbil) / apagar |
+| `bt scan` / `bt list` | Cerca aparells d'àudio a prop / llista'ls amb el senyal |
+| `bt connect <n>` / `bt forget` | Enllaça amb el número de la llista / desfés l'enllaç |
 | `web [on\|off\|status]` | Servidor web per pujar/esborrar fitxers a la SD |
 | `ap [off] [ssid] [pass]` | Punt d'accés propi: http://192.168.4.1 |
 | `webtest` / `webdump` | Autoprova del servidor web / envia la pàgina pel sèrie |

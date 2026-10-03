@@ -1245,9 +1245,26 @@ void handleCommand(char* cmd)
         } else if (strcmp(arg, "off") == 0) {
             Audio::btSetMode(Audio::BtMode::Off);
             Audio::setOutput(Audio::Output::Dac);
+        } else if (strcmp(arg, "scan") == 0) {
+            Audio::btStartScan();
+        } else if (strcmp(arg, "list") == 0) {
+            const uint8_t n = Audio::btDeviceCount();
+            Serial.printf("[BT] %u aparells d'audio%s\n", static_cast<unsigned>(n),
+                          Audio::btScanning() ? " (encara cercant...)" : "");
+            for (uint8_t i = 0; i < n; ++i) {
+                const Audio::BtDevice* d = Audio::btDevice(i);
+                if (d != nullptr) {
+                    Serial.printf("  %u. %s  %d dBm%s\n", static_cast<unsigned>(i), d->name,
+                                  static_cast<int>(d->rssi),
+                                  d->connected ? "  [enllacat]" : "");
+                }
+            }
+        } else if (strncmp(arg, "connect ", 8) == 0) {
+            Audio::btConnect(static_cast<uint8_t>(atoi(arg + 8)));
+        } else if (strcmp(arg, "forget") == 0) {
+            Audio::btDisconnect();
         } else {
-            Serial.println(F("[BT] us: bt [source|sink|off|status]"
-                             "  (source = musica cap als auriculars)"));
+            Serial.println(F("[BT] us: bt [source|sink|off|scan|list|connect <n>|forget|status]"));
         }
     } else if (strcmp(cmd, "tap") == 0) {
         int tx = 0;

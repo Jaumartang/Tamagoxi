@@ -27,6 +27,29 @@ bool    btConnected();
 const char* btName();          /* nom amb que ens veuen els altres */
 const char* btPeer();          /* dispositiu connectat ("" si cap) */
 
+/* --- Cerca i enllacament de dispositius (auriculars, altaveus) ------------- */
+
+constexpr uint8_t kBtMaxDevices = 8;
+constexpr size_t  kBtNameMax    = 32;
+
+struct BtDevice {
+    char     name[kBtNameMax];
+    uint8_t  addr[6];
+    int8_t   rssi;
+    bool     connected;      /* es el dispositiu enllacat ara */
+};
+
+/* Comenca una cerca (dura uns 10 s) i la fa la pila Bluetooth. */
+void btStartScan();
+bool btScanning();
+uint8_t btDeviceCount();
+const BtDevice* btDevice(uint8_t index);
+
+/* Enllaca amb el dispositiu (l'index es de la llista de la cerca). */
+bool btConnect(uint8_t index);
+/* oblida l'enllac actual */
+void btDisconnect();
+
 void begin();
 
 /* Sortida activa (es pot canviar en calent). */
