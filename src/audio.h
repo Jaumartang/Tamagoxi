@@ -24,6 +24,10 @@ enum class BtMode : uint8_t { Off, Sink, Source };
 void    btSetMode(BtMode mode);
 BtMode  btMode();
 bool    btConnected();
+/* Aparell amb qui s'ha demanat enllacar (-1 si cap) i si l'intent ha quedat
+ * sense resposta (la biblioteca ho diu de seguida; donam 8 s de marge). */
+int8_t  btTargetIndex();
+bool    btConnectFailed();
 const char* btName();          /* nom amb que ens veuen els altres */
 const char* btPeer();          /* dispositiu connectat ("" si cap) */
 

@@ -991,10 +991,14 @@ void drawBluetooth()
                 t.setTextDatum(ML_DATUM);
                 t.setTextFont(1);
                 t.setTextColor(kDimText, Ui::colorPanelBg());
-                t.drawString(Audio::btScanning()
-                                 ? "Cercant aparells d'audio a prop..."
-                                 : "Toca \"Escaneja\" amb els auriculars encesos",
-                             16, ry + 14);
+                if (Audio::btScanning()) {
+                    t.drawString("Cercant aparells d'audio a prop...", 16, ry + 14);
+                } else {
+                    /* Els auriculars nomes es deixen veure en mode vincle: es el
+                     * motiu mes habitual que no surtin a la llista. */
+                    t.drawString("Posa els auriculars en MODE VINCLE", 16, ry + 12);
+                    t.drawString("(llum intermitent) i toca \"Escaneja\"", 16, ry + 28);
+                }
             }
             continue;
         }
@@ -1002,7 +1006,14 @@ void drawBluetooth()
         if (d == nullptr) {
             continue;
         }
-        const uint16_t bg = d->connected ? kGood : Ui::colorTrack();
+        /* L'estat de veritat el diu el propi enllac (la biblioteca contesta de
+         * seguida quan un dispositiu no accepta la connexio). */
+        const int8_t tgt    = Audio::btTargetIndex();
+        const bool isTarget = (tgt == static_cast<int8_t>(i));
+        const bool linked   = isTarget && Audio::btConnected();
+        const bool failed   = isTarget && Audio::btConnectFailed();
+        const bool trying   = isTarget && !linked && !failed;
+        const uint16_t bg = linked ? kGood : (failed ? kBad : Ui::colorTrack());
         const int rh = kBtRowH2 - 6;
         t.fillRoundRect(8, ry, SCREEN_W - 16, rh, 8, bg);
         t.setTextDatum(ML_DATUM);
@@ -1010,7 +1021,11 @@ void drawBluetooth()
         t.setTextColor(kText, bg);
         t.drawString(d->name, 16, ry + rh / 2 - 7);
         t.setTextFont(1);
-        t.drawString(d->connected ? "enllacat" : "toca per enllacar", 16, ry + rh / 2 + 9);
+        t.drawString(linked ? "enllacat"
+                            : (trying ? "enllacant..."
+                                      : (failed ? "no ha respost: mode vincle?"
+                                                : "toca per enllacar")),
+                     16, ry + rh / 2 + 9);
         char rssi[12];
         snprintf(rssi, sizeof(rssi), "%d", static_cast<int>(d->rssi));
         t.setTextDatum(MR_DATUM);
@@ -1038,6 +1053,8 @@ struct BtSnapshot {
     bool    connected;
     bool    scanning;
     uint8_t count;
+    int8_t  target;          /* aparell amb qui s'intenta enllacar */
+    bool    failed;          /* l'intent ha quedat sense resposta */
     char    names[Audio::kBtMaxDevices][Audio::kBtNameMax];
     int8_t  rssi[Audio::kBtMaxDevices];
 };
@@ -1050,6 +1067,8 @@ void saveBtSnapshot()
     gBtSnap.connected = Audio::btConnected();
     gBtSnap.scanning  = Audio::btScanning();
     gBtSnap.count     = Audio::btDeviceCount();
+    gBtSnap.target    = Audio::btTargetIndex();
+    gBtSnap.failed    = Audio::btConnectFailed();
     for (uint8_t i = 0; i < gBtSnap.count && i < Audio::kBtMaxDevices; ++i) {
         const Audio::BtDevice* d = Audio::btDevice(i);
         if (d == nullptr) {
@@ -1065,7 +1084,9 @@ bool btChanged()
     if (gBtSnap.mode != static_cast<uint8_t>(Audio::btMode())
         || gBtSnap.connected != Audio::btConnected()
         || gBtSnap.scanning != Audio::btScanning()
-        || gBtSnap.count != Audio::btDeviceCount()) {
+        || gBtSnap.count != Audio::btDeviceCount()
+        || gBtSnap.target != Audio::btTargetIndex()
+        || gBtSnap.failed != Audio::btConnectFailed()) {
         return true;
     }
     for (uint8_t i = 0; i < gBtSnap.count && i < Audio::kBtMaxDevices; ++i) {

@@ -327,6 +327,7 @@ volatile uint8_t gDeviceCount = 0;
 volatile bool    gScanning    = false;
 bool             gGapChained  = false;
 int8_t           gConnectedIdx = -1;
+uint32_t         gConnectTryMs = 0;    /* quan s'ha demanat l'ultim enllac */
 
 /* Treu el nom, el senyal i la classe d'un aparell trobat i, si es d'audio
  * (auriculars, altaveu...), el desa a la llista. */
@@ -631,23 +632,48 @@ bool btConnect(uint8_t index)
     if (!gBtStarted || index >= gDeviceCount) {
         return false;
     }
+    /* Si encara s'esta cercant, ho aturam: la cerca i l'enllac no es poden fer
+     * alhora i la biblioteca es queixaria. */
+    if (gScanning) {
+        esp_bt_gap_cancel_discovery();
+        gScanning = false;
+    }
     esp_bd_addr_t addr;
     memcpy(addr, gDevices[index].addr, 6);
     const esp_err_t err = esp_a2d_source_connect(addr);
     Serial.printf("[BT] enllacant amb %s -> %s\n", gDevices[index].name,
                   esp_err_to_name(err));
+    if (gConnectedIdx >= 0 && gConnectedIdx < static_cast<int8_t>(gDeviceCount)) {
+        gDevices[gConnectedIdx].connected = false;
+    }
     if (err == ESP_OK) {
-        if (gConnectedIdx >= 0) {
-            gDevices[gConnectedIdx].connected = false;
-        }
         gConnectedIdx = static_cast<int8_t>(index);
-        gDevices[index].connected = true;
+        gConnectTryMs = millis();
+    } else {
+        gConnectedIdx = -1;
     }
     return err == ESP_OK;
 #else
     (void)index;
     return false;
 #endif
+}
+
+/* Aparell amb qui s'ha demanat enllacar (-1 si cap). */
+int8_t btTargetIndex()
+{
+    return gConnectedIdx;
+}
+
+/* L'enllac s'ha demanat pero el dispositiu no ha respost? */
+bool btConnectFailed()
+{
+    if (gConnectedIdx < 0 || gA2dp.isConnected()) {
+        return false;
+    }
+    /* La biblioteca contesta de seguida si el dispositiu no accepta: si al cap
+     * de vuit segons no hi ha enllac, donam l'intent per perdut. */
+    return (millis() - gConnectTryMs) > 8000;
 }
 
 void btDisconnect()

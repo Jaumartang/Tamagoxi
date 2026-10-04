@@ -2,6 +2,16 @@
 
 Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
 
+## Bluetooth: enllacç amb auriculars (mode vincle)
+- El panell ja **no marca un aparell com enllacat** només de demanar-ho: ara
+  llegeix l'estat real de l'enllaç i mostra **enllacant…**, **enllacat** (verd) o
+  **no ha respost: mode vincle?** (vermell). Abans podia sortir en verd un
+  enllaç que en realitat s'havia trencat al moment.
+- Si es demana l'enllaç mentre encara s'està cercant, primer s'atura la cerca
+  (abans es demanaven les dues coses alhora i podia fallar).
+- Els textos d'ajuda expliquen el que gairebé sempre passa: els auriculars
+  només es deixen veure si estan en **mode vincle** (llum intermitent).
+
 ## Correcció important: cançons amb nom llarg (Música)
 - Els noms dels fitxers de `/music` es desaven en un buffer de 48 caràcters i, en
   obrir-los, en un camí de 64. Qualsevol cançó amb títol llarg (per exemple
