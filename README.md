@@ -58,8 +58,14 @@ SMS sense un mòdul GSM, així que fem servir **Telegram**: cada destinatari és
 
 - **Avisos automàtics**: si la mascota té molta gana, està malalta, trista o
   esgotada, envia un avís tot sol (com a molt, un cada 5 minuts).
-- **Comandes**: `msg` (estat), `msg <text>` (enviar un text), `msg add <n>`,
-  `msg del <n>`, `msg clear`, `msg on|off`, `msg test`.
+- **Rebre missatges** 📲: si escrius al bot des del mòbil, el Tamagoxi els
+  recull (cada 10 segons) i **surt una finestreta a la pantalla** amb el
+  missatge; s'hi està 20 segons o fins que toquis *D'acord*. **Només** accepta
+  els missatges dels números de la llista; la resta els ignora.
+- **Comandes**: `msg` (estat), `msg <text>` (enviar un text), `msg inbox` (veure
+  els rebuts), `msg poll` (mirar-ho ara mateix), `msg add <n>`, `msg del <n>`,
+  `msg clear`, `msg on|off`, `msg test`, `msg fake <text>` (provar la finestreta
+  sense cap bot).
 - Els enviaments els fa la **tasca de xarxa**: mai bloquegen la mascota. Si no
   hi ha WiFi, el missatge queda esperant i surt quan torni la connexió.
 - Tot es desa a la NVS (sobreviu als reinicis).
@@ -335,6 +341,8 @@ En arrencar:
 | `ap [off] [ssid] [pass]` | Punt d'accés propi: http://192.168.4.1 |
 | `webtest` / `webdump` | Autoprova del servidor web / envia la pàgina pel sèrie |
 | `msg [text]` / `msg test` | Envia un missatge al mòbil (Telegram) / prova |
+| `msg inbox` / `msg poll` | Missatges rebuts / comprova'ls ara |
+| `msg fake <text>` | Entra un missatge de prova (per veure la finestreta) |
 | `msg add <n>` / `msg del <n>` | Afegeix o treu un número destinatari |
 | `msg token <t>` / `msg on\|off` | Token del bot / activar o aturar els missatges |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |

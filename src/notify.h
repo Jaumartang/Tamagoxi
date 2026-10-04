@@ -43,7 +43,6 @@ bool        removeRecipient(uint8_t index);
 void        clearAll();
 
 /* --- Enviament ------------------------------------------------------------ */
-
 /* Envia un missatge a tots els destinataris (no bloqueja: es posa a la cua). */
 void send(const char* text);
 
@@ -57,5 +56,28 @@ bool busy();                     /* hi ha un missatge esperant */
 const char* lastResult();        /* com ha anat l'ultim enviament */
 uint32_t    sentCount();
 void        printStatus();
+
+/* --- Missatges que ENS arriben (del mobil al Tamagoxi) -------------------- */
+
+constexpr uint8_t kMaxInbox = 5;
+constexpr size_t  kInboxTextMax = 120;
+
+struct InboxMsg {
+    char     from[24];       /* numero (chat id) de qui l'ha enviat */
+    char     text[kInboxTextMax];
+    uint32_t ms;
+};
+
+uint8_t         inboxCount();
+const InboxMsg* inbox(uint8_t index);   /* 0 = el mes nou */
+/* Cert si n'hi ha algun de nou, i els marca com a llegits (per la finestreta). */
+bool            takeNew();
+/* Forca una comprovacio ara (la fa igualment la tasca de xarxa cada 10 s). */
+void            pollNow();
+uint32_t        receivedCount();
+
+/* Nomes per provar la finestreta sense cap bot: entra un missatge com si
+ * hagues arribat del mobil. */
+void            inject(const char* from, const char* text);
 
 }  // namespace Notify

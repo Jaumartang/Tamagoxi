@@ -1,6 +1,7 @@
 #include "notify.h"
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <WiFi.h>
@@ -99,6 +100,108 @@ bool sendToOne(const char* chatId, const char* text)
     snprintf(gLastResult, sizeof(gLastResult), "error %d (%s)", code, why);
     Serial.printf("[MSG] error %d en enviar a %s (%s)\n", code, chatId, why);
     return false;
+}
+
+}  // namespace
+
+/* --- Missatges que ens arriben del mobil ---------------------------------- */
+
+namespace {
+
+constexpr uint32_t kPollEveryMs = 10000;      /* cada quan mirem si n'hi ha */
+
+Notify::InboxMsg  gInbox[Notify::kMaxInbox];
+volatile uint8_t  gInboxCount = 0;
+int64_t           gLastUpdateId = 0;
+uint32_t          gLastPollMs    = 0;
+volatile bool     gInboxNew     = false;
+volatile uint32_t gReceived     = 0;
+
+void addInbox(const char* from, const char* text)
+{
+    for (int8_t i = static_cast<int8_t>(Notify::kMaxInbox) - 1; i > 0; --i) {
+        gInbox[i] = gInbox[i - 1];            /* la mes nova queda al davant */
+    }
+    strlcpy(gInbox[0].from, from, sizeof(gInbox[0].from));
+    strlcpy(gInbox[0].text, text, sizeof(gInbox[0].text));
+    gInbox[0].ms = millis();
+    if (gInboxCount < Notify::kMaxInbox) {
+        ++gInboxCount;
+    }
+    gInboxNew = true;
+    ++gReceived;
+    Serial.printf("[MSG] rebut de %s: %s\n", from, text);
+}
+
+/* Mira si el bot te missatges nous i se'ls queda si venen dels nostres numeros. */
+void pollIncoming()
+{
+    if (gToken[0] == '\0' || !gEnabled || WiFi.status() != WL_CONNECTED) {
+        return;
+    }
+    const uint32_t now = millis();
+    if (gLastPollMs != 0 && (now - gLastPollMs) < kPollEveryMs) {
+        return;
+    }
+    gLastPollMs = now;
+
+    char url[220];
+    snprintf(url, sizeof(url),
+             "https://api.telegram.org/bot%s/getUpdates?offset=%lld&timeout=0&limit=5",
+             gToken, static_cast<long long>(gLastUpdateId + 1));
+
+    WiFiClientSecure client;
+    client.setInsecure();
+    HTTPClient http;
+    http.setTimeout(12000);
+    if (!http.begin(client, url)) {
+        return;
+    }
+    const int code = http.GET();
+    if (code != 200) {
+        if (code == 401) {
+            strlcpy(gLastResult, "token incorrecte", sizeof(gLastResult));
+        }
+        http.end();
+        return;
+    }
+    const String payload = http.getString();
+    http.end();
+
+    JsonDocument doc;
+    if (deserializeJson(doc, payload) != DeserializationError::Ok) {
+        return;
+    }
+    for (JsonObject up : doc["result"].as<JsonArray>()) {
+        const int64_t id = up["update_id"] | static_cast<int64_t>(0);
+        if (id >= gLastUpdateId) {
+            gLastUpdateId = id;               /* no el tornem a llegir */
+        }
+        JsonObject msg = up["message"];
+        if (msg.isNull()) {
+            continue;
+        }
+        const char* text = msg["text"] | "";
+        if (text[0] == '\0') {
+            continue;
+        }
+        char from[24];
+        snprintf(from, sizeof(from), "%lld",
+                 static_cast<long long>(msg["chat"]["id"] | static_cast<int64_t>(0)));
+
+        bool known = false;
+        for (uint8_t i = 0; i < gCount; ++i) {
+            if (strcmp(gRecipients[i], from) == 0) {
+                known = true;
+                break;
+            }
+        }
+        if (!known) {
+            Serial.printf("[MSG] ignorat (numero desconegut): %s\n", from);
+            continue;
+        }
+        addInbox(from, text);
+    }
 }
 
 }  // namespace
@@ -245,6 +348,8 @@ void alert(const char* text)
 
 void loop()
 {
+    pollIncoming();                 /* primer, si ens han escrit */
+
     if (!gPending) {
         return;
     }
@@ -284,14 +389,58 @@ uint32_t sentCount()
 
 void printStatus()
 {
-    Serial.printf("[MSG] %s, token=%s, %u numeros, enviats=%lu, ultim: %s\n",
+    Serial.printf("[MSG] %s, token=%s, %u numeros, enviats=%lu, rebuts=%lu, ultim: %s\n",
                   gEnabled ? "activat" : "aturat",
                   (gToken[0] != '\0') ? "si" : "NO",
                   static_cast<unsigned>(gCount),
-                  static_cast<unsigned long>(gSent), gLastResult);
+                  static_cast<unsigned long>(gSent),
+                  static_cast<unsigned long>(gReceived), gLastResult);
     for (uint8_t i = 0; i < gCount; ++i) {
         Serial.printf("  %u. %s\n", static_cast<unsigned>(i), gRecipients[i]);
     }
+    for (uint8_t i = 0; i < gInboxCount; ++i) {
+        Serial.printf("  rebut de %s: %s\n", gInbox[i].from, gInbox[i].text);
+    }
+}
+
+/* --- Missatges rebuts ----------------------------------------------------- */
+
+uint8_t inboxCount()
+{
+    return gInboxCount;
+}
+
+const InboxMsg* inbox(uint8_t index)
+{
+    return (index < gInboxCount) ? &gInbox[index] : nullptr;
+}
+
+bool takeNew()
+{
+    if (!gInboxNew) {
+        return false;
+    }
+    gInboxNew = false;
+    return true;
+}
+
+void pollNow()
+{
+    gLastPollMs = 0;
+    pollIncoming();
+}
+
+uint32_t receivedCount()
+{
+    return gReceived;
+}
+
+void inject(const char* from, const char* text)
+{
+    if (text == nullptr || text[0] == '\0') {
+        return;
+    }
+    addInbox((from != nullptr && from[0] != '\0') ? from : "prova", text);
 }
 
 }  // namespace Notify

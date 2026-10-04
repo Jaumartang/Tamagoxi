@@ -10,6 +10,7 @@
 #include "display.h"
 #include "led.h"
 #include "net.h"
+#include "notify.h"
 #include "pet.h"
 #include "sd_assets.h"
 #include "storage.h"
@@ -266,6 +267,8 @@ void showWifi();
 void showMusic();
 void showBluetooth();
 void drawBluetooth();
+void showMessage();
+void drawMessage();
 void drawMusicTime();
 void saveBtSnapshot();
 bool btChanged();
@@ -1318,6 +1321,7 @@ const char* name(Id id)
         case Id::Wifi:     return "wifi";
         case Id::Music:    return "musica";
         case Id::Bluetooth: return "bluetooth";
+        case Id::Message:   return "missatge";
         case Id::Settings: return "ajustos";
         case Id::About:    return "sobre";
         case Id::Games:    return "jocs";
@@ -1372,6 +1376,70 @@ void showBluetooth()
     drawBluetooth();
 }
 
+/* --- Finestreta del missatge que ens ha arribat del mobil ----------------- */
+
+void drawMessage()
+{
+    TFT_eSPI& t = tft();
+    t.fillRect(0, 0, SCREEN_W, SCREEN_H, Ui::colorPanelBg());
+    drawTitleBar("Missatge");
+
+    const Notify::InboxMsg* m = Notify::inbox(0);
+
+    t.setTextDatum(ML_DATUM);
+    t.setTextFont(1);
+    t.setTextColor(kDimText, Ui::colorPanelBg());
+    if (m != nullptr) {
+        char who[40];
+        snprintf(who, sizeof(who), "De: %s", m->from);
+        t.drawString(who, 14, 58);
+    } else {
+        t.drawString("(cap missatge)", 14, 58);
+    }
+
+    t.setTextFont(2);
+    t.setTextColor(kText, Ui::colorPanelBg());
+    if (m != nullptr) {
+        /* El text, trencat en linies de 36 caracters per paraules. */
+        char line[40];
+        const char* p = m->text;
+        int y = 90;
+        while (*p != '\0' && y < 396) {
+            size_t n = 0;
+            while (p[n] != '\0' && n < 36) {
+                ++n;
+            }
+            if (p[n] != '\0') {
+                size_t k = n;
+                while (k > 8 && p[k] != ' ') {
+                    --k;
+                }
+                if (k > 8) {
+                    n = k;
+                }
+            }
+            memcpy(line, p, n);
+            line[n] = '\0';
+            t.drawString(line, 16, y);
+            y += 26;
+            p += n;
+            while (*p == ' ') {
+                ++p;
+            }
+        }
+    }
+
+    drawButton(8, 410, 304, 60, "D'acord", Ui::colorClose());
+}
+
+void showMessage()
+{
+    gId    = Id::Message;
+    gTimer = millis();
+    Serial.println(F("[UI] finestra de missatge"));
+    drawMessage();
+}
+
 void showGames()
 {
     gId = Id::Games;
@@ -1393,6 +1461,7 @@ void open(Id id)
         case Id::Wifi:     showWifi(); break;
         case Id::Music:    showMusic(); break;
         case Id::Bluetooth: showBluetooth(); break;
+        case Id::Message:   showMessage(); break;
         case Id::Settings: showSettings(); break;
         case Id::About:    showAbout(); break;
         case Id::Games:    showGames(); break;
@@ -1735,6 +1804,11 @@ bool handleTap(int16_t x, int16_t y)
             return false;           /* Tanca */
         }
         return true;
+    }
+
+    /* --- Missatge del mobil: qualsevol toc el tanca --- */
+    if (gId == Id::Message) {
+        return false;
     }
 
     /* --- Sobre i Jocs: boto Tanca de baix --- */

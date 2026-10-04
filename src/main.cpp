@@ -63,6 +63,7 @@ Screen   gScreen = Screen::Static;
 uint8_t  gBgIndex = 0;
 uint32_t gBgTimer = 0;
 bool     gTouchWasPressed = false;
+uint32_t gMsgPanelMs      = 0;      /* quan s'ha obert la finestra de missatge */
 uint32_t gPetAnimTimer = 0;
 uint32_t gPetOverlayTimer = 0;
 
@@ -1238,6 +1239,20 @@ void handleCommand(char* cmd)
             Notify::setEnabled(true);
         } else if (strcmp(arg, "off") == 0) {
             Notify::setEnabled(false);
+        } else if (strcmp(arg, "poll") == 0) {
+            Notify::pollNow();
+        } else if (strcmp(arg, "inbox") == 0) {
+            const uint8_t n = Notify::inboxCount();
+            Serial.printf("[MSG] %u missatges rebuts\n", static_cast<unsigned>(n));
+            for (uint8_t i = 0; i < n; ++i) {
+                const Notify::InboxMsg* m = Notify::inbox(i);
+                if (m != nullptr) {
+                    Serial.printf("  %u. de %s: %s\n", static_cast<unsigned>(i), m->from,
+                                  m->text);
+                }
+            }
+        } else if (strncmp(arg, "fake ", 5) == 0) {
+            Notify::inject("prova", arg + 5);
         } else if (strcmp(arg, "test") == 0) {
             Notify::send("Prova del Tamagoxi: si llegeixes aixo, els missatges ja funcionen!");
         } else {
@@ -1464,6 +1479,16 @@ void setup()
 void loop()
 {
     pollSerial();
+
+    /* Missatge del mobil: si n'ha arribat algun, s'obre la finestreta. */
+    if (gScreen == Screen::Home && !Panels::isOpen() && Notify::takeNew()) {
+        Panels::open(Panels::Id::Message);
+        gMsgPanelMs = millis();
+    }
+    /* I es tanca sola si no la tanquen abans. */
+    if (Panels::current() == Panels::Id::Message && (millis() - gMsgPanelMs) > 20000) {
+        closePanels();
+    }
 
     /* Si s'ha pujat musica nova pel navegador, refresquem la llista d'aquí (que
      * es qui mana sobre el reproductor) i no des de la tasca de xarxa. */
