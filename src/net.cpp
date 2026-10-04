@@ -14,6 +14,7 @@
 
 #include "tg_config.h"
 #include "webui.h"
+#include "notify.h"
 
 #if __has_include(<secrets.h>)
 #include <secrets.h>
@@ -413,6 +414,9 @@ void netTask(void*)
         } else {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
+
+        /* Missatges al mobil (Telegram): tambe els envia aquesta tasca. */
+        Notify::loop();
     }
 }
 

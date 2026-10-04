@@ -16,6 +16,7 @@
 #include "ui.h"
 #include "ui_panels.h"
 #include "webui.h"
+#include "notify.h"
 
 /*
  * main.cpp - Tamagoxi v2 (Tamagotchi gegant per a la Noa)
@@ -907,7 +908,7 @@ void printHelp()
                      "| petreset | home | menu | act <feed|play|sleep|heal|pet> "
                      "| shot [x y w h] | baud <n> | tmon [s] | needs | sets <f> <h> <e> <s> "
                      "| theme [n] | homebg [nom|auto] | wifi [ssid pass] | net | meteo "
-                     "| geo <lat> <lon> | tap <x> <y> | beep [freq ms vol] | audio [dac|bt|vol n] | bt [source|sink|off] | web [on|off] | ap [off]"));
+                     "| geo <lat> <lon> | tap <x> <y> | beep [freq ms vol] | audio [dac|bt|vol n] | bt [source|sink|off] | web [on|off] | ap [off] | msg [<text>|token|add|del|on|off]"));
 }
 
 void printInfo()
@@ -1222,6 +1223,26 @@ void handleCommand(char* cmd)
         if (Audio::writeTestWav(name, static_cast<uint16_t>(secs))) {
             Audio::scan();
         }
+    } else if (strcmp(cmd, "msg") == 0) {
+        if (arg == nullptr) {
+            Notify::printStatus();
+        } else if (strncmp(arg, "token ", 6) == 0) {
+            Notify::setToken(arg + 6);
+        } else if (strncmp(arg, "add ", 4) == 0) {
+            Notify::addRecipient(arg + 4);
+        } else if (strncmp(arg, "del ", 4) == 0) {
+            Notify::removeRecipient(static_cast<uint8_t>(atoi(arg + 4)));
+        } else if (strcmp(arg, "clear") == 0) {
+            Notify::clearAll();
+        } else if (strcmp(arg, "on") == 0) {
+            Notify::setEnabled(true);
+        } else if (strcmp(arg, "off") == 0) {
+            Notify::setEnabled(false);
+        } else if (strcmp(arg, "test") == 0) {
+            Notify::send("Prova del Tamagoxi: si llegeixes aixo, els missatges ja funcionen!");
+        } else {
+            Notify::send(arg);          /* 'msg <text>' envia el text */
+        }
     } else if (strcmp(cmd, "webtest") == 0) {
         WebUI::requestSelfTest(false);
     } else if (strcmp(cmd, "webdump") == 0) {
@@ -1432,6 +1453,7 @@ void setup()
     /* Els panells (ajustos) poden canviar el fons a traves d'aquests hooks. */
     Panels::Hooks hooks = {panelSetBackground, panelIsAutoBackground, panelBackgroundName};
     Panels::setHooks(hooks);
+    Notify::begin();
 
     updateLed();
     gHeapTimer = millis();
@@ -1463,6 +1485,29 @@ void loop()
 
     if (gScreen == Screen::Home) {
         Pet::update(millis());
+
+        /* Avisos al mobil si la mascota ho passa malament (Notify::alert te un
+         * limit de frequencia, aixi que no empipa). */
+        if (Notify::enabled()) {
+            const Pet::Needs& n = Pet::needs();
+            char alerta[120];
+            if (n.food < 20) {
+                snprintf(alerta, sizeof(alerta), "El drac te molta gana! (menjar %u/100)",
+                         n.food);
+                Notify::alert(alerta);
+            } else if (n.health < 40) {
+                snprintf(alerta, sizeof(alerta), "El drac està malalt (salut %u/100): cuida'l!",
+                         n.health);
+                Notify::alert(alerta);
+            } else if (n.happiness < 20) {
+                snprintf(alerta, sizeof(alerta), "El drac està trist (felicitat %u/100)",
+                         n.happiness);
+                Notify::alert(alerta);
+            } else if (n.energy < 15) {
+                snprintf(alerta, sizeof(alerta), "El drac no pot mes: posa'l a dormir");
+                Notify::alert(alerta);
+            }
+        }
 
         /* L'hora del NTP arriba un cop: la passem a la mascota perque apliqui el
          * decaiment del temps que ha estat apagada. */

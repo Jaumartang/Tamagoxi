@@ -266,6 +266,7 @@ void showWifi();
 void showMusic();
 void showBluetooth();
 void drawBluetooth();
+void drawMusicTime();
 void saveBtSnapshot();
 bool btChanged();
 void drawMusic();
@@ -979,6 +980,9 @@ void drawGames()
 
 bool gListDrawn = false;
 uint32_t gTimer = 0;
+uint8_t  gMusicIdx     = 0xFF;   /* per no repintar el panell de musica sense motiu */
+uint8_t  gMusicCount   = 0xFF;
+bool     gMusicPlaying = false;
 
 void applyScene(const SdAssets::Backgrounds& bgs)
 {
@@ -1113,6 +1117,42 @@ void drawNowPlaying()
     t.setTextColor(kDimText, Ui::colorTrack());
     t.drawString(times, 16, kNpY + 37);
 
+    t.setTextDatum(MR_DATUM);
+    t.setTextColor(st.playing ? (st.paused ? kWarn : kGood) : kDimText, Ui::colorTrack());
+    t.drawString(st.paused ? "en pausa" : (st.playing ? "sonant" : "aturat"),
+                 SCREEN_W - 16, kNpY + 37);
+    t.setTextDatum(ML_DATUM);
+
+    const int x = 8;
+    const int w = SCREEN_W - 16;
+    t.fillRoundRect(x, kProgY, w, 10, 5, Ui::colorTrack());
+    const int fw = (w * st.percent) / 100;
+    if (fw > 4) {
+        t.fillRoundRect(x, kProgY, fw, 10, 5, kGood);
+    }
+}
+
+/* Repinta NOMES el que va canviant (temps, estat i barra de progres): abans es
+ * repintava tot el panell cada 500 ms i es veia parpellejar. */
+void drawMusicTime()
+{
+    TFT_eSPI& t = tft();
+    const Audio::Status& st = Audio::status();
+
+    char times[28];
+    snprintf(times, sizeof(times), "%lu:%02lu / %lu:%02lu",
+             static_cast<unsigned long>(st.elapsedSec / 60),
+             static_cast<unsigned long>(st.elapsedSec % 60),
+             static_cast<unsigned long>(st.totalSec / 60),
+             static_cast<unsigned long>(st.totalSec % 60));
+
+    t.setTextDatum(ML_DATUM);
+    t.fillRect(14, kNpY + 28, 160, 18, Ui::colorTrack());
+    t.setTextFont(1);
+    t.setTextColor(kDimText, Ui::colorTrack());
+    t.drawString(times, 16, kNpY + 37);
+
+    t.fillRect(SCREEN_W - 116, kNpY + 28, 100, 18, Ui::colorTrack());
     t.setTextDatum(MR_DATUM);
     t.setTextColor(st.playing ? (st.paused ? kWarn : kGood) : kDimText, Ui::colorTrack());
     t.drawString(st.paused ? "en pausa" : (st.playing ? "sonant" : "aturat"),
@@ -1394,9 +1434,20 @@ void update(uint32_t nowMs)
     if (gId == Id::Music) {
         if (nowMs - gTimer >= 500) {
             gTimer = nowMs;
-            drawNowPlaying();
-            drawTransport();
-            drawMusicList();
+            const Audio::Status& st = Audio::status();
+            /* Nomes repintem el transport i la llista si canvia la canco o
+             * l'estat: la resta (temps i barra) es el que va canviant. */
+            if (st.index != gMusicIdx || st.count != gMusicCount
+                || st.playing != gMusicPlaying) {
+                gMusicIdx     = st.index;
+                gMusicCount   = st.count;
+                gMusicPlaying = st.playing;
+                drawTransport();
+                drawMusicList();
+                drawNowPlaying();
+            } else {
+                drawMusicTime();
+            }
         }
         return;
     }

@@ -37,6 +37,33 @@ de l'ESP32) i connector per a altaveu extern. El so viu en una **tasca pròpia**
   comprovar que se sent, sense necessitat d'ordinador.
 - **`beep [freq ms vol]`**: to de prova directe (per validar l'altaveu).
 
+## Missatges al mòbil (Fase 9) — `src/notify.*`
+
+El Tamagoxi pot **enviar missatges al mòbil** a una **llista de números
+seleccionats** (avisos de la mascota o el que vulguis). L'ESP32 no pot enviar
+SMS sense un mòdul GSM, així que fem servir **Telegram**: cada destinatari és un
+**número** (el *chat id*) i el missatge arriba com una notificació.
+
+**Posar-ho en marxa (un cop):**
+1. Al Telegram, parla amb **@BotFather** → `/newbot` → copia el **token**.
+2. Escriu un "hola" al teu bot i mira el número de xat a
+   `https://api.telegram.org/bot<token>/getUpdates`.
+3. A la consola del Tamagoxi:
+   ```
+   msg token 123456789:AAF...    (el token que t'ha donat BotFather)
+   msg add 123456789             (el chat id; tants cops com números vulguis)
+   msg on                        (activa els missatges)
+   msg test                      (prova d'enviament)
+   ```
+
+- **Avisos automàtics**: si la mascota té molta gana, està malalta, trista o
+  esgotada, envia un avís tot sol (com a molt, un cada 5 minuts).
+- **Comandes**: `msg` (estat), `msg <text>` (enviar un text), `msg add <n>`,
+  `msg del <n>`, `msg clear`, `msg on|off`, `msg test`.
+- Els enviaments els fa la **tasca de xarxa**: mai bloquegen la mascota. Si no
+  hi ha WiFi, el missatge queda esperant i surt quan torni la connexió.
+- Tot es desa a la NVS (sobreviu als reinicis).
+
 ## Pujar fitxers per WiFi (Fase 8) — `src/webui.*`
 
 La placa porta un **servidor web**: puja fitxers a la SD des del navegador del
@@ -307,6 +334,9 @@ En arrencar:
 | `web [on\|off\|status]` | Servidor web per pujar/esborrar fitxers a la SD |
 | `ap [off] [ssid] [pass]` | Punt d'accés propi: http://192.168.4.1 |
 | `webtest` / `webdump` | Autoprova del servidor web / envia la pàgina pel sèrie |
+| `msg [text]` / `msg test` | Envia un missatge al mòbil (Telegram) / prova |
+| `msg add <n>` / `msg del <n>` | Afegeix o treu un número destinatari |
+| `msg token <t>` / `msg on\|off` | Token del bot / activar o aturar els missatges |
 | `sets <f> <h> <e> <s>` | (proves) Força les necessitats 0-100 per veure els estats |
 | `menu` | Obre el menú desplegable d'accions |
 | `act <feed\|play\|sleep\|heal\|pet>` | Executa una acció com si s'hagués triat al menú |
