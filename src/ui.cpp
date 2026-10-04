@@ -133,7 +133,7 @@ void glassCard(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radiu
     TFT_eSPI& t = gfx();
     if (bgName == nullptr || bgName[0] == '\0' || !BgRenderer::beginStrip(bgName)) {
         t.fillRoundRect(x, y, w, h, radius, tint);     /* sense SD: pla */
-        t.drawRoundRect(x, y, w, h, radius, blend565(tint, 0xFFFF, 70));
+        t.drawRoundRect(x, y, w, h, radius, blend565(tint, 0x0000, 72));
         return;
     }
 
@@ -145,11 +145,16 @@ void glassCard(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radiu
         if (!BgRenderer::readStripRow(ry, x, w, srck)) {
             break;
         }
+        const int fromBottom = (y + h - 1) - ry;
         for (int i = 0; i < w; ++i) {
             const uint16_t b = static_cast<uint16_t>((srck[i * 2] << 8) | srck[i * 2 + 1]);
             uint16_t c = b;
             if (insideRound(i, ry, 0, y, w, h, radius)) {
                 c = blend565(tint, c, pct);
+                /* Ombra propia a baix: fa que la targeta sembli rellevada. */
+                if (fromBottom < 3) {
+                    c = blend565(0x0000, c, static_cast<uint8_t>(14 + fromBottom * 8));
+                }
             }
             outk[i * 2]     = static_cast<uint8_t>(c >> 8);
             outk[i * 2 + 1] = static_cast<uint8_t>(c & 0xFF);
@@ -158,6 +163,11 @@ void glassCard(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radiu
     }
     t.endWrite();
     BgRenderer::endStrip();
+
+    /* Vora fosca + fil clar a dins: donen definicio a la targeta. */
+    const uint16_t edge = blend565(tint, 0x0000, 72);
+    t.drawRoundRect(x, y, w, h, radius, edge);
+    t.drawRoundRect(x + 1, y + 1, w - 2, h - 2, radius, blend565(edge, tint, 55));
 }
 
 /* Barreja dos colors RGB565: 'pa' per cent del primer. */
@@ -392,7 +402,7 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
     /* Cada barra va dins una TARGETA DE VIDRE CLAR (blanc translucid): aixi el
      * fons es veu a travers pero tot te contrast. */
     for (int i = 0; i < 4; ++i) {
-        glassCard(0, UI_BARS_TOP + i * rowH + 1, UI_BARS_PANEL_R, rowH - 3, 0xFFFF, 46, 9);
+        glassCard(0, UI_BARS_TOP + i * rowH + 1, UI_BARS_PANEL_R, rowH - 3, 0xFFFF, 62, 9);
     }
 
     /* La pista i l'omplert, opacs al damunt del vidre (aixi els colors son
@@ -460,7 +470,7 @@ void drawActionButton(int i, uint16_t col, const char* label)
 
     /* Targeta de vidre tenyida amb el color de l'accio: el fons es veu a
      * travers pero el boto te molta personalitat. */
-    glassCard(x, y, w, h, col, 62, 14);
+    glassCard(x, y, w, h, col, 82, 14);
 
     TFT_eSPI& t = gfx();
     const uint16_t tint = blend565(col, 0xFFFFFF, 62);   /* el vidre tenyit */
@@ -496,7 +506,7 @@ void drawCompactBars()
     const int y0 = UI_BARS_BOT - UI_MENU_STRIP;
 
     /* Franja de vidre clar a sota de tot. */
-    glassCard(0, y0, SCREEN_W, UI_MENU_STRIP, 0xFFFFFF, 50, 0);
+    glassCard(0, y0, SCREEN_W, UI_MENU_STRIP, 0xFFFFFF, 64, 0);
 
     const int cw = SCREEN_W / 4;
     const uint16_t cols[4] = {kColHunger, kColHappy, kColEnergy, kColHealth};
@@ -527,7 +537,7 @@ void drawMenuButton()
     const int h = UI_MENU_BTN_BOT - y;
 
     /* La mateixa targeta de vidre clar que les barres: tot lliga. */
-    glassCard(x + 2, y + 1, w - 4, h - 3, 0xFFFF, 46, 12);
+    glassCard(x + 2, y + 1, w - 4, h - 3, 0xFFFF, 62, 12);
 
     TFT_eSPI& t = gfx();
     /* Tres ratlles gruixudes i vives (amb ombra perque ressaltin). */
@@ -560,7 +570,7 @@ void drawMenu(bool sleeping)
     const int by = UI_BARS_TOP + 2;
     const int bw = SCREEN_W - bx - 2;
     const int bh = UI_MENU_BTN_BOT - by - 2;
-    glassCard(bx, by, bw, bh, 0xFFFFFF, 46, 14);
+    glassCard(bx, by, bw, bh, 0xFFFFFF, 62, 14);
 
     const int cx = bx + bw / 2;
     const int cy = by + bh / 2 - 10;
