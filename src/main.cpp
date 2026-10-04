@@ -432,10 +432,26 @@ void homeHud()
     Ui::drawHud(hud);
 }
 
+/* Definit mes avall: valida el nom del fons contra el manifest de la SD. */
+bool backgroundExists(const char* name);
+
 void startHome()
 {
     if (gHomeBg[0] == '\0') {
         strlcpy(gHomeBg, PET_TEST_BG, sizeof(gHomeBg));
+    }
+
+    /* El fons desat pot ser d'un pack vell que ja no hi es: en aquest cas triam
+     * el de per defecte (i, si tampoc hi es, el primer del manifest). */
+    if (!backgroundExists(gHomeBg)) {
+        char old[sizeof(gHomeBg)];
+        strlcpy(old, gHomeBg, sizeof(old));
+        if (backgroundExists(PET_TEST_BG)) {
+            strlcpy(gHomeBg, PET_TEST_BG, sizeof(gHomeBg));
+        } else if (SdAssets::backgrounds().count > 0) {
+            strlcpy(gHomeBg, SdAssets::backgrounds().names[0], sizeof(gHomeBg));
+        }
+        Serial.printf("[UI] fons '%s' inexistent a la SD -> '%s'\n", old, gHomeBg);
     }
 
     /* Amb el Bluetooth ences la mascota esta suspesa (no hi ha memoria per als

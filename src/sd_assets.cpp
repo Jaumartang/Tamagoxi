@@ -147,11 +147,25 @@ bool readPetManifest(const char* folder, SdAssets::Pet& p)
     }
 
     strlcpy(p.folder, folder, SdAssets::kNameLen);
+
+    /* Mides: el manifest "vell" les posa planes ("width"/"height"); el pack nou
+     * les posa dins una llista ("size": [128, 128]). Acceptam les dues. */
     p.width  = doc["width"] | 0;
     p.height = doc["height"] | 0;
-    p.fps    = doc["fps"] | 6;
+    if (p.width == 0 || p.height == 0) {
+        JsonArray size = doc["size"].as<JsonArray>();
+        if (size.size() >= 2) {
+            p.width  = size[0] | 0;
+            p.height = size[1] | 0;
+        }
+    }
+    p.fps = doc["fps"] | 6;
 
+    /* Color transparent: "transparent" (vell) o "transparent_color" (nou). */
     const char* transparent = doc["transparent"] | "";
+    if (transparent == nullptr || transparent[0] == '\0') {
+        transparent = doc["transparent_color"] | "";
+    }
     p.hasTransparent = (transparent != nullptr && transparent[0] != '\0');
     p.transparent = p.hasTransparent
                         ? static_cast<uint16_t>(strtoul(transparent, nullptr, 0))
@@ -159,14 +173,33 @@ bool readPetManifest(const char* folder, SdAssets::Pet& p)
 
     p.animCount = 0;
     JsonObject anims = doc["animations"].as<JsonObject>();
-    for (JsonPair kv : anims) {
-        if (p.animCount >= SdAssets::kMaxAnims) {
-            Serial.println(F("[SD] avís: massa animacions (truncat)"));
-            break;
+    if (!anims.isNull()) {
+        /* Format vell: { "IDLE": 24, "HAPPY": 24, ... } */
+        for (JsonPair kv : anims) {
+            if (p.animCount >= SdAssets::kMaxAnims) {
+                Serial.println(F("[SD] avís: massa animacions (truncat)"));
+                break;
+            }
+            strlcpy(p.anims[p.animCount].name, kv.key().c_str(), SdAssets::kNameLen);
+            p.anims[p.animCount].frames = kv.value().as<uint8_t>();
+            ++p.animCount;
         }
-        strlcpy(p.anims[p.animCount].name, kv.key().c_str(), SdAssets::kNameLen);
-        p.anims[p.animCount].frames = kv.value().as<uint8_t>();
-        ++p.animCount;
+    } else {
+        /* Format nou: "states": ["IDLE", ...] + "frames_per_state": 24 */
+        const uint8_t perState = doc["frames_per_state"] | 0;
+        JsonArray states = doc["states"].as<JsonArray>();
+        if (perState == 0 && states.size() > 0) {
+            Serial.println(F("[SD] avís: manifest sense frames_per_state"));
+        }
+        for (JsonVariant v : states) {
+            if (p.animCount >= SdAssets::kMaxAnims) {
+                Serial.println(F("[SD] avís: massa estats (truncat)"));
+                break;
+            }
+            strlcpy(p.anims[p.animCount].name, v.as<const char*>(), SdAssets::kNameLen);
+            p.anims[p.animCount].frames = perState;
+            ++p.animCount;
+        }
     }
 
     return (p.width > 0) && (p.height > 0) && (p.animCount > 0);

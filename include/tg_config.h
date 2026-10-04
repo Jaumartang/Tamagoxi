@@ -110,7 +110,7 @@ static constexpr uint32_t AUDIO_TASK_STACK  = 8192;
 #endif
 
 /* Fons que es fa servir a la pantalla de prova de la mascota. */
-static constexpr const char* PET_TEST_BG = "spring";
+static constexpr const char* PET_TEST_BG = "spring_00";
 
 /* --- Mascota: joc (Fase 5) ------------------------------------------------ */
 /* Velocitat de decaiment de les necessitats, en unitats per minut. */

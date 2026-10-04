@@ -307,7 +307,7 @@ void drawTopMenu()
 
     /* Panell de vidre clar i, a dins, cada fila una targeta de vidre tenyida
      * amb el seu color (el fons es veu a travers). */
-    Ui::glassCard(kMenuX, kMenuY, kMenuW, kMenuH, 0xFFFFFF, 66, 14);
+    Ui::glassCard(kMenuX, kMenuY, kMenuW, kMenuH, 0xFFFF, 66, 14);
 
     const char* labels[kMenuRows] = {"WiFi", "Musica", "Bluetooth", "Missatges",
                                      "Jocs", "Ajustos", "Sobre"};
@@ -711,6 +711,48 @@ int bgIndexOf(const char* name)
     return -1;
 }
 
+/* Els packs nous guarden 4 frames per escena (X_00..X_03): en triar fons nomes
+ * passam per la primera (o pels noms sense frames, que son les escenes velles). */
+bool isSceneEntry(uint8_t i)
+{
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    const char* n = bgs.names[i];
+    const size_t len = strlen(n);
+    if (len >= 3 && n[len - 3] == '_' && n[len - 2] == '0' && n[len - 1] == '0') {
+        return true;
+    }
+    char frame[24];
+    snprintf(frame, sizeof(frame), "%s_00", n);
+    for (uint8_t j = 0; j < bgs.count; ++j) {
+        if (strcmp(bgs.names[j], frame) == 0) {
+            return false;               /* aquest nom es un frame (X_01...) */
+        }
+    }
+    return true;
+}
+
+/* Escena seguent/anterior saltant els frames. -1 = automatic (meteo). */
+int stepScene(int from, int dir, int count)
+{
+    int idx = from;
+    for (int guard = 0; guard <= count; ++guard) {
+        idx += dir;
+        if (idx > count - 1) {
+            idx = -1;
+        }
+        if (idx < -1) {
+            idx = count - 1;
+        }
+        if (idx == -1) {
+            return -1;
+        }
+        if (isSceneEntry(static_cast<uint8_t>(idx))) {
+            return idx;
+        }
+    }
+    return -1;
+}
+
 void drawSettings()
 {
     TFT_eSPI& t = tft();
@@ -735,6 +777,10 @@ void drawSettings()
         strlcpy(name, "Automatic (meteo)", sizeof(name));
     } else if (gSceneIndex < bgs.count) {
         strlcpy(name, bgs.names[gSceneIndex], sizeof(name));
+        const size_t nlen = strlen(name);
+        if (nlen >= 3 && strcmp(name + nlen - 3, "_00") == 0) {
+            name[nlen - 3] = '\0';      /* amaga el sufix de primer frame */
+        }
     } else {
         strlcpy(name, "?", sizeof(name));
     }
@@ -1938,10 +1984,10 @@ bool handleTap(int16_t x, int16_t y)
                 return true;
             }
             if (x < 64) {
-                gSceneIndex = (gSceneIndex <= -1) ? (count - 1) : (gSceneIndex - 1);
+                gSceneIndex = stepScene(gSceneIndex, -1, count);
                 applyScene(bgs);
             } else if (x >= SCREEN_W - 64) {
-                gSceneIndex = (gSceneIndex + 1 > count - 1) ? -1 : (gSceneIndex + 1);
+                gSceneIndex = stepScene(gSceneIndex, +1, count);
                 applyScene(bgs);
             }
             return true;

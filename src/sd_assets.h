@@ -21,8 +21,8 @@
 namespace SdAssets {
 
 constexpr uint8_t kMaxPets        = 8;
-constexpr uint8_t kMaxBackgrounds = 48;
-constexpr uint8_t kMaxAnims       = 12;
+constexpr uint8_t kMaxBackgrounds = 128;   /* packs grans (tamagochi_sd-3: 112) */
+constexpr uint8_t kMaxAnims       = 20;    /* estats de mascota (pack: 16) */
 constexpr size_t  kNameLen        = 20;
 
 struct Anim {

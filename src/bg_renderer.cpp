@@ -280,10 +280,18 @@ bool beginStrip(const char* name)
 
 bool readStripRow(int y, int x, int w, uint8_t* out)
 {
-    if (!gStrip || y < 0 || x < 0 || w <= 0) {
+    if (!gStrip || x < 0 || w <= 0) {
         return false;
     }
-    if (x + w > static_cast<int>(gStripW) || y >= static_cast<int>(gStripH)) {
+    if (x + w > static_cast<int>(gStripW)) {
+        return false;
+    }
+    /* Si el fons es mes baix que la pantalla (pack de 320x400), repetim la
+     * darrera fila: aixi les targetes de vidre tambe funcionen abaix de tot. */
+    if (y >= static_cast<int>(gStripH)) {
+        y = static_cast<int>(gStripH) - 1;
+    }
+    if (y < 0) {
         return false;
     }
     const uint32_t off = (static_cast<uint32_t>(y) * gStripW + static_cast<uint32_t>(x)) * 2u;

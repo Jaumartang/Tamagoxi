@@ -2,6 +2,35 @@
 
 Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
 
+## Compatibilitat amb el pack d'assets nou (tamagochi_sd-3)
+- El firmware ara entén **els dos formats de manifest de mascota**:
+  - el clàssic: `width`/`height`, `animations: {"IDLE": 24, ...}`, `transparent`
+  - el del pack nou: `size: [128, 128]`, `states: [...]`, `frames_per_state`,
+    `transparent_color`
+  Així els packs nous funcionen sense haver de convertir-los.
+- **Límits ampliats**: 128 fons (abans 48) i 20 animacions per mascota (abans 12),
+  perquè el pack hi càpiga sencer (112 fons, 16 estats): abans es perdien
+  SAD, SICK, SLEEP i WALK.
+- **Fons de 320×400** i 4 frames per escena (el pack nou): s'accepten (les 80
+  files que falten fins a 480 les tapen l'HUD i les barres de baix) i la lectura
+  per franges repeteix la darrera fila perquè les targetes de vidre també es
+  vegin bé a la part inferior.
+- **Meteo**: si l'escena `weather_NN` no hi és, es fa servir el seu primer frame
+  (`weather_NN_00`).
+- **Selector de fons (Ajustos)**: passa només per les escenes, saltant els
+  frames `_01.._03`, i amaga el sufix `_00` del nom que es mostra.
+- **Fons per defecte**: `spring_00`; si el fons desat ja no existeix al pack, se
+  n'escull un altre tot sol (mai una pantalla buida).
+
+## Estil: interfície de vidre
+- **Targetes de vidre translúcid**: `Ui::glassCard()` llegeix el fons de la SD
+  fila a fila i hi barreja un tint, de manera que el dibuix del fons es veu a
+  través de les barres, els botons i els panells.
+- Aplicat a les barres d'estat, el botó MENU, els botons d'acció, la barra
+  superior (HUD: rellotge, meteo i WiFi) i el menú desplegable de dalt.
+- `Ui::mix()` i `Ui::inkOn()` són públics: `inkOn()` tria text clar o fosc
+  segons el fons perquè sempre es llegeixi bé.
+
 ## Fase 10 — Jocs didàctics i recompenses
 - **5 jocs** per aprendre jugant, pensats per a una nena de 6 anys:
   **Sumes**, **Restes** (1-17, es fan més difícils a mesura que juga),

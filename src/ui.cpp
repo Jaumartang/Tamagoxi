@@ -506,7 +506,7 @@ void drawActionButton(int i, uint16_t col, const char* label)
     glassCard(x, y, w, h, col, 82, 14);
 
     TFT_eSPI& t = gfx();
-    const uint16_t tint = blend565(col, 0xFFFFFF, 62);   /* el vidre tenyit */
+    const uint16_t tint = blend565(col, 0xFFFF, 62);   /* el vidre tenyit */
     /* Icona i text clars o foscos segons com de clar queda el vidre (si no,
      * sobre colors clars no es veurien). */
     const uint16_t rr = ((tint >> 11) & 0x1F) * 255 / 31;
@@ -539,7 +539,7 @@ void drawCompactBars()
     const int y0 = UI_BARS_BOT - UI_MENU_STRIP;
 
     /* Franja de vidre clar a sota de tot. */
-    glassCard(0, y0, SCREEN_W, UI_MENU_STRIP, 0xFFFFFF, 64, 0);
+    glassCard(0, y0, SCREEN_W, UI_MENU_STRIP, 0xFFFF, 64, 0);
 
     const int cw = SCREEN_W / 4;
     const uint16_t cols[4] = {kColHunger, kColHappy, kColEnergy, kColHealth};
@@ -553,7 +553,7 @@ void drawCompactBars()
         const int fw = (bw * v) / 100;
         if (fw > 3) {
             t.fillRoundRect(bx, by, fw, bh, 3, cols[i]);
-            t.fillRoundRect(bx + 1, by + 1, fw - 2, 2, 1, blend565(cols[i], 0xFFFFFF, 55));
+            t.fillRoundRect(bx + 1, by + 1, fw - 2, 2, 1, blend565(cols[i], 0xFFFF, 55));
         } else if (fw > 0) {
             t.fillRect(bx, by, fw, bh, cols[i]);
         }
@@ -603,7 +603,7 @@ void drawMenu(bool sleeping)
     const int by = UI_BARS_TOP + 2;
     const int bw = SCREEN_W - bx - 2;
     const int bh = UI_MENU_BTN_BOT - by - 2;
-    glassCard(bx, by, bw, bh, 0xFFFFFF, 62, 14);
+    glassCard(bx, by, bw, bh, 0xFFFF, 62, 14);
 
     const int cx = bx + bw / 2;
     const int cy = by + bh / 2 - 10;

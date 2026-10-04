@@ -13,6 +13,7 @@
 #include <time.h>
 
 #include "tg_config.h"
+#include "sd_assets.h"
 #include "webui.h"
 #include "notify.h"
 
@@ -717,13 +718,35 @@ Ap scanAp(uint8_t index)
     return out;
 }
 
+/* Existeix aquest nom de fons al manifest de la SD? */
+static bool bgNameExists(const char* name)
+{
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    for (uint8_t i = 0; i < bgs.count; ++i) {
+        if (strcmp(bgs.names[i], name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 const char* backgroundName()
 {
-    static char name[16];
+    static char name[24];
     if (!gWeather.valid) {
         return "";
     }
     snprintf(name, sizeof(name), "weather_%02u", static_cast<unsigned>(gWeather.bgIndex));
+    /* Els packs nous guarden 4 frames per escena ("weather_01_00"): si el nom
+     * pelat no hi es, feim servir el primer frame de l'escena. */
+    if (!bgNameExists(name)) {
+        char frameName[24];
+        snprintf(frameName, sizeof(frameName), "weather_%02u_00",
+                 static_cast<unsigned>(gWeather.bgIndex));
+        if (bgNameExists(frameName)) {
+            strlcpy(name, frameName, sizeof(name));
+        }
+    }
     return name;
 }
 
