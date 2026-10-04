@@ -453,48 +453,64 @@ namespace {
 
 void drawActionButton(int i, uint16_t col, const char* label)
 {
-    const int x = i * kActionW;
-    const int y = UI_BARS_TOP;
-    const int w = kActionW;
-    const int h = kActionH;
+    const int x = i * kActionW + 2;
+    const int y = UI_BARS_TOP + 2;
+    const int w = kActionW - 4;
+    const int h = kActionH - 10;
+
+    /* Targeta de vidre tenyida amb el color de l'accio: el fons es veu a
+     * travers pero el boto te molta personalitat. */
+    glassCard(x, y, w, h, col, 62, 14);
 
     TFT_eSPI& t = gfx();
-    t.fillRect(x, y, w, h, col);
-    t.drawLine(x, y, x, y + h - 1, th().panelEdge);
+    const uint16_t tint = blend565(col, 0xFFFFFF, 62);   /* el vidre tenyit */
+    /* Icona i text clars o foscos segons com de clar queda el vidre (si no,
+     * sobre colors clars no es veurien). */
+    const uint16_t rr = ((tint >> 11) & 0x1F) * 255 / 31;
+    const uint16_t gg = ((tint >> 5) & 0x3F) * 255 / 63;
+    const uint16_t bb = (tint & 0x1F) * 255 / 31;
+    const uint16_t lum = (rr * 299 + gg * 587 + bb * 114) / 1000;
+    const uint16_t ink  = (lum > 140) ? blend565(col, 0x0000, 68) : TFT_WHITE;
+    const uint16_t shad = (lum > 140) ? 0xFFFF : 0x0000;
 
     const int cx = x + w / 2;
-    const int iy = y + 12;
+    const int iy = y + h / 2 - 9;
     switch (i) {
-        case 0: iconApple(cx, iy, 19, TFT_WHITE, col); break;
-        case 1: iconBall(cx, iy, 19, TFT_WHITE, col); break;
-        case 2: iconMoon(cx, iy, 19, TFT_WHITE, col); break;
-        default: iconCross(cx, iy, 19, TFT_WHITE); break;
+        case 0: iconApple(cx, iy, 21, ink, tint); break;
+        case 1: iconBall(cx, iy, 21, ink, tint); break;
+        case 2: iconMoon(cx, iy, 21, ink, tint); break;
+        default: iconCross(cx, iy, 21, ink); break;
     }
 
     t.setTextDatum(MC_DATUM);
-    t.setTextFont(1);
-    t.setTextColor(TFT_WHITE, col);
-    t.drawString(label, cx, y + h - 6);
+    t.setTextFont(2);
+    t.setTextColor(shad, tint);                          /* ombra */
+    t.drawString(label, cx, y + h - 15);
+    t.setTextColor(ink, tint);
+    t.drawString(label, cx, y + h - 16);
 }
 
 void drawCompactBars()
 {
     TFT_eSPI& t = gfx();
     const int y0 = UI_BARS_BOT - UI_MENU_STRIP;
-    t.drawLine(0, y0, SCREEN_W - 1, y0, th().panelEdge);
+
+    /* Franja de vidre clar a sota de tot. */
+    glassCard(0, y0, SCREEN_W, UI_MENU_STRIP, 0xFFFFFF, 50, 0);
 
     const int cw = SCREEN_W / 4;
     const uint16_t cols[4] = {kColHunger, kColHappy, kColEnergy, kColHealth};
     for (int i = 0; i < 4; ++i) {
         const int bx = i * cw + 4;
         const int bw = cw - 8;
-        const int bh = 5;
+        const int bh = 6;
         const int by = y0 + (UI_MENU_STRIP - bh) / 2;
         const uint8_t v = (gLastBars[i] > 100) ? 100 : gLastBars[i];
-        t.fillRoundRect(bx, by, bw, bh, 2, th().barTrack);
+        t.fillRoundRect(bx, by, bw, bh, 3, 0xD69A);
         const int fw = (bw * v) / 100;
-        if (fw > 2) {
-            t.fillRoundRect(bx, by, fw, bh, 2, cols[i]);
+        if (fw > 3) {
+            t.fillRoundRect(bx, by, fw, bh, 3, cols[i]);
+            t.fillRoundRect(bx + 1, by + 1, fw - 2, 2, 1, blend565(cols[i], 0xFFFFFF, 55));
         } else if (fw > 0) {
             t.fillRect(bx, by, fw, bh, cols[i]);
         }
@@ -534,30 +550,31 @@ void drawMenu(bool sleeping)
 {
     TFT_eSPI& t = gfx();
 
-    t.fillRect(0, UI_BARS_TOP, SCREEN_W, UI_BARS_BOT - UI_BARS_TOP, th().panelBg);
-
     drawActionButton(0, th().row[0], "Menjar");
     drawActionButton(1, th().row[1], "Jugar");
     drawActionButton(2, th().row[2], sleeping ? "Desperta" : "Dormir");
     drawActionButton(3, th().row[3], "Curar");
 
-    /* Boto de tancar (dreta) amb una X. */
-    const int bx = UI_MENU_BTN_L;
-    const int by = UI_MENU_BTN_TOP;
-    const int bw = SCREEN_W - bx;
-    const int bh = UI_MENU_BTN_BOT - by;
-    const uint16_t closeCol = th().close;
-    t.fillRect(bx, by, bw, bh, closeCol);
-    t.drawLine(bx, by, bx, by + bh - 1, th().panelEdge);
-    t.drawLine(bx, by, SCREEN_W - 1, by, th().panelEdge);
+    /* Boto de tancar (dreta): vidre clar amb una X ben visible. */
+    const int bx = UI_MENU_BTN_L + 2;
+    const int by = UI_BARS_TOP + 2;
+    const int bw = SCREEN_W - bx - 2;
+    const int bh = UI_MENU_BTN_BOT - by - 2;
+    glassCard(bx, by, bw, bh, 0xFFFFFF, 46, 14);
+
     const int cx = bx + bw / 2;
-    const int cy = by + bh / 2 - 4;
-    t.drawLine(cx - 8, cy - 8, cx + 8, cy + 8, TFT_WHITE);
-    t.drawLine(cx - 8, cy + 8, cx + 8, cy - 8, TFT_WHITE);
+    const int cy = by + bh / 2 - 10;
+    const uint16_t red = 0xF800;
+    for (int d = -2; d <= 2; ++d) {                      /* X gruixuda */
+        t.drawLine(cx - 14, cy - 14 + d, cx + 14, cy + 14 + d, red);
+        t.drawLine(cx - 14, cy + 14 + d, cx + 14, cy - 14 + d, red);
+    }
     t.setTextDatum(MC_DATUM);
-    t.setTextFont(1);
-    t.setTextColor(TFT_WHITE, closeCol);
-    t.drawString("Tanca", cx, by + bh - 6);
+    t.setTextFont(2);
+    t.setTextColor(0xFFFF, 0xD69A);
+    t.drawString("Tanca", cx, by + bh - 13);
+    t.setTextColor(blend565(red, 0x0000, 30), 0xD69A);
+    t.drawString("Tanca", cx, by + bh - 14);
 
     drawCompactBars();
 }
