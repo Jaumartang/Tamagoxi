@@ -2,6 +2,12 @@
 
 Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
 
+## Correccions d'usabilitat dels panells
+- **Guardia de toc (450 ms)**: quan un toc obre o tanca un panell (o el
+  desplegable de dalt), els tocs següents queden bloquejats un moment. Abans el
+  mateix dit podia obrir un panell i tornar-lo a tancar tot seguit: es veia un
+  flaix i semblava que el panell «no sortís».
+
 ## Xarxa pròpia des de la pantalla (punt d'accés)
 - Al panell **WiFi** hi ha ara el botó **«Crear xarxa pròpia (Tamagoxi)»**: crea
   un punt d'accés obert i posa en marxa el servidor web, perquè es puguin pujar

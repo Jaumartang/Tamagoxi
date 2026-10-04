@@ -167,6 +167,10 @@ static constexpr uint32_t UI_PET_COOLDOWN_MS = 1200;
 static constexpr uint32_t UI_HEART_MS = 1200;
 /* Anti-rebot del tactil: no processar dos tocs seguits en menys d'aixo (ms). */
 static constexpr uint32_t UI_TAP_DEBOUNCE_MS = 180;
+/* Despres d'obrir o tancar un panell, els tocs queden bloquejats aquesta estona:
+ * si no, el mateix dit (o un rebot) obre el panell i el torna a tancar de cop i
+ * sembla que "no surti". */
+static constexpr uint32_t UI_TAP_SETTLE_MS = 450;
 
 /* Diagnostica del tactil a l'arrencada: mostra una pantalla "toca ara" i
  * enregistra la pressio crua durant uns segons. Desactivat en produccio. */

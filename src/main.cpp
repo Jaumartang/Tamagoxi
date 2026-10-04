@@ -82,6 +82,7 @@ uint32_t gPressStart = 0;
 bool     gLongPressDone = false;
 bool     gMenuOpen = false;
 uint32_t gLastTapMs = 0;
+uint32_t gTapLockUntil = 0;      /* els tocs s'ignoren fins aquest instant */
 volatile bool    gTouchLatch = false;
 volatile int16_t gTouchLatchX = 0;
 volatile int16_t gTouchLatchY = 0;
@@ -1671,14 +1672,26 @@ void loop()
             tx = gTouchLatchX;
             ty = gTouchLatchY;
         }
-        if (haveTap && (millis() - gLastTapMs >= UI_TAP_DEBOUNCE_MS)) {
+        if (haveTap && (millis() >= gTapLockUntil) &&
+            (millis() - gLastTapMs >= UI_TAP_DEBOUNCE_MS)) {
             gLastTapMs = millis();
+
+            /* Estat abans del toc: si canvia de pantalla, bloquejam la resta. */
+            const Panels::Id beforeId   = Panels::current();
+            const bool       beforeOpen = Panels::isOpen();
+            const bool       beforeMenu = gMenuOpen;
+
             if (Panels::isOpen()) {
                 if (!Panels::handleTap(tx, ty)) {
                     closePanels();
                 }
             } else {
                 handleHomeTap(tx, ty);
+            }
+
+            if (Panels::current() != beforeId || Panels::isOpen() != beforeOpen ||
+                gMenuOpen != beforeMenu) {
+                gTapLockUntil = millis() + UI_TAP_SETTLE_MS;
             }
         }
 
