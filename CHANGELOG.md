@@ -2,6 +2,18 @@
 
 Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
 
+## Xarxa pròpia des de la pantalla (punt d'accés)
+- Al panell **WiFi** hi ha ara el botó **«Crear xarxa pròpia (Tamagoxi)»**: crea
+  un punt d'accés obert i posa en marxa el servidor web, perquè es puguin pujar
+  fitxers a la SD **sense cap router** (`http://192.168.4.1/`).
+- El mateix botó passa a **«Aturar xarxa pròpia»** per tancar-la.
+- Mentre la xarxa pròpia és encesa, la mascota deixa anar els seus buffers
+  (com amb el Bluetooth) i la pantalla d'inici ho explica amb l'adreça.
+- El punt d'accés **no sobreviu reinicis** (es torna a encendre amb el botó): és
+  una eina de manteniment, no l'estat normal de la mascota.
+- La llista de xarxes passa de 7 a 6 files per fer-hi lloc.
+- Fins ara només es podia encendre amb la comanda de consola `ap`.
+
 ## Compatibilitat amb el pack d'assets nou (tamagochi_sd-3)
 - El firmware ara entén **els dos formats de manifest de mascota**:
   - el clàssic: `width`/`height`, `animations: {"IDLE": 24, ...}`, `transparent`

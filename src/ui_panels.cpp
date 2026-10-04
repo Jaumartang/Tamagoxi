@@ -14,6 +14,7 @@
 #include "games.h"
 #include "pet.h"
 #include "sd_assets.h"
+#include "sprite_renderer.h"
 #include "storage.h"
 #include "ui.h"
 
@@ -370,8 +371,10 @@ void drawTopMenu()
 
 constexpr int kListTop  = 84;
 constexpr int kListRowH = 44;
-constexpr int kListRows = 7;
+constexpr int kListRows = 6;          /* 7 abans: deixam lloc al boto de xarxa propia */
 constexpr int kListW    = 296;
+constexpr int kApBtnY   = 352;
+constexpr int kApBtnH   = 52;
 constexpr int kBtnY     = 410;
 constexpr int kBtnH     = 60;
 
@@ -464,6 +467,12 @@ void drawWifiList()
 
 void drawWifiBottom()
 {
+    /* Xarxa propia: deixa pujar fitxers a la SD sense cap router pel mig. */
+    const bool ap = Net::apMode();
+    drawButton(8, kApBtnY, 304, kApBtnH,
+               ap ? "Aturar xarxa propia (192.168.4.1)" : "Crear xarxa propia (Tamagoxi)",
+               ap ? Ui::colorClose() : Ui::colorRow(2));
+
     drawButton(8, kBtnY, 216, kBtnH, Net::scanRunning() ? "Cercant..." : "Cerca xarxes",
                Ui::colorRow(1));
     drawButton(232, kBtnY, 80, kBtnH, "Tanca", Ui::colorClose());
@@ -1889,6 +1898,24 @@ bool handleTap(int16_t x, int16_t y)
                 ++gListTop;
             }
             drawWifiList();
+            return true;
+        }
+        if (y >= kApBtnY && y < kApBtnY + kApBtnH) {
+            if (Net::apMode()) {
+                Net::stopAccessPoint();
+                SpriteRenderer::resume();       /* ja hi ha memoria per a la mascota */
+                Serial.printf("[UI] xarxa propia aturada, heap %u kB\n",
+                              static_cast<unsigned>(ESP.getFreeHeap() / 1024));
+            } else {
+                /* La pila WiFi necessita ~50 kB: deixam anar els buffers grossos
+                 * de la mascota mentre dura la xarxa propia. */
+                SpriteRenderer::suspend();
+                Net::startAccessPoint("Tamagoxi", nullptr);
+                Serial.printf("[UI] xarxa propia: %s, heap %u kB\n",
+                              Net::apMode() ? "encesa a http://192.168.4.1/" : "no s'ha pogut obrir",
+                              static_cast<unsigned>(ESP.getFreeHeap() / 1024));
+            }
+            drawWifi();
             return true;
         }
         if (y >= kBtnY && y <= kBtnY + kBtnH) {

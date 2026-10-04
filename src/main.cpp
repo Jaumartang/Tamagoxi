@@ -471,17 +471,23 @@ void startHome()
         SpriteRenderer::setAnimation(Pet::animation());
         SpriteRenderer::drawFrame();
     } else {
-        /* El Bluetooth te la memoria que necessita la mascota: ho diem clar. */
+        /* O el Bluetooth o la xarxa propia necessiten la memoria que la mascota
+         * te reservada: ho diem clar. */
+        const bool ap = Net::apMode();
         TFT_eSPI& t = Display::driver();
-        t.fillRoundRect(48, 186, 224, 68, 14, Ui::colorPanelBg());
-        t.drawRoundRect(48, 186, 224, 68, 14, Ui::colorAccent());
+        t.fillRoundRect(48, 176, 224, 88, 14, Ui::colorPanelBg());
+        t.drawRoundRect(48, 176, 224, 88, 14, Ui::colorAccent());
         t.setTextDatum(MC_DATUM);
         t.setTextFont(2);
         t.setTextColor(Ui::colorAccent(), Ui::colorPanelBg());
-        t.drawString("Bluetooth ences", SCREEN_W / 2, 204);
+        t.drawString(ap ? "Xarxa propia encesa" : "Bluetooth ences", SCREEN_W / 2, 200);
         t.setTextFont(1);
         t.setTextColor(TFT_WHITE, Ui::colorPanelBg());
-        t.drawString("la mascota dorm mentre dura", SCREEN_W / 2, 230);
+        t.drawString(ap ? "obre http://192.168.4.1/" : "la mascota dorm mentre dura",
+                     SCREEN_W / 2, 226);
+        if (ap) {
+            t.drawString("la mascota dorm mentre dura", SCREEN_W / 2, 246);
+        }
     }
     gWasSleeping = Pet::sleeping();
 
