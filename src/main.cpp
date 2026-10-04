@@ -1127,6 +1127,16 @@ void handleCommand(char* cmd)
     } else if (strcmp(cmd, "link") == 0) {
         if (arg == nullptr) {
             Link::printStatus();
+        } else if (strcmp(arg, "on") == 0) {
+            /* Passa l'UART0 (els pins del connector de 4 fils) a l'enllac.
+             * A partir d'aqui el monitor serie d'aquesta placa queda mut. */
+            Serial.println(F("[LINK] engegant l'enllac a 921600 pels pins del connector UART"));
+            Serial.println(F("[LINK] el monitor queda desconnectat fins que reiniciis la placa"));
+            Serial.flush();
+            Link::begin();
+        } else if (strcmp(arg, "off") == 0) {
+            Serial.begin(SERIAL_BAUD);
+            Serial.println(F("[LINK] consola recuperada a 115200"));
         } else {
             /* Envia un text al xip amic: serveix per provar l'anada i tornada. */
             Link::send("LOG", arg);
@@ -1520,7 +1530,6 @@ void setup()
     Panels::setHooks(hooks);
     Notify::begin();
     Games::begin();
-    Link::begin();
 
     updateLed();
     gHeapTimer = millis();
@@ -1530,7 +1539,9 @@ void setup()
 
 void loop()
 {
-    pollSerial();
+    if (!Link::active()) {
+        pollSerial();         /* la consola nomes escolta si l'enllac esta aturat */
+    }
     Link::update();       /* parla amb el xip amic (ping + respostes) */
 
     /* Missatge del mobil: si n'ha arribat algun, s'obre la finestreta. */

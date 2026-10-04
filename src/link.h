@@ -12,14 +12,18 @@
 
 namespace Link {
 
-/* Pins de l'enllac en aquesta placa (la pantalla). */
-constexpr int kTxPin = 32;   /* envia cap al xip amic (el seu 16) */
-constexpr int kRxPin = 34;   /* rep del xip amic (el seu 17); nomes entrada */
+/* Pins de l'enllac en aquesta placa (la pantalla). Son els del CONNECTOR UART
+ * de 4 fils (TX/RX/GND): en aquesta placa, UART0 = IO1 (TX) i IO3 (RX). Com que
+ * son els mateixos pins del monitor serie, l'enllac NOMES s'activa amb la
+ * comanda "link on" i es desactiva reiniciant la placa. */
+constexpr int kTxPin = 1;    /* envia cap al xip amic (el seu RX) */
+constexpr int kRxPin = 3;    /* rep del xip amic (el seu TX) */
 
 void begin();                   /* obre la UART (cridar un cop al setup) */
 void update();                  /* llegeix i contesta: cridar sovint des del bucle */
 
 bool online();                  /* el xip amic ens ha parlat fa poc? */
+bool active();                  /* l'enllac ja esta engegat (comanda "link on")? */
 uint32_t lastSeenMs();          /* fa quants ms que no en sabem res */
 const char* lastMessage();      /* ultim LOG que ens ha enviat */
 

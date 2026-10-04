@@ -3,23 +3,27 @@
  *
  * Fa de periferics: Bluetooth i audio (de moment, sap parlar per l'enllac).
  *
- * Cablejat amb la placa de la pantalla:
- *   aquesta TX (GPIO 17) -> GPIO 34 de la pantalla
- *   aquesta RX (GPIO 16) <- GPIO 32 de la pantalla
- *   GND                  -> GND
+ * Cablejat amb la placa de la pantalla (connector UART de 4 fils):
+ *   el seu TX (IO1) -> aquesta RX (IO3)
+ *   la seva RX (IO3) <- aquesta TX (IO1)
+ *   GND             -> GND          (NO connectis el 5V!)
+ *
+ * Com que son els mateixos pins del port USB, la consola nomes funciona els
+ * primers 2,5 segons d'engegar: despres la placa passa a l'enllac (921600).
+ * Per tornar a veure la consola, reinicia-la.
  *
  * Compilar i pujar:   pio run -e friend -t upload
- * Monitor:            pio device monitor -e friend
  */
 
 #include <Arduino.h>
 
 #include "tg_link.h"
 
-constexpr int    kTxPin   = 17;
-constexpr int    kRxPin   = 16;
+constexpr int    kTxPin   = 1;        /* connector UART de la placa: IO1 (TX) */
+constexpr int    kRxPin   = 3;        /* i IO3 (RX) */
 constexpr int    kLedPin  = 2;        /* LED blau de la placa */
 constexpr size_t kLineMax = 240;
+constexpr uint32_t kConsoleMs = 2500; /* estona de consola abans de passar a l'enllac */
 
 char     gLine[kLineMax];
 size_t   gLen = 0;
@@ -43,7 +47,6 @@ void reply(const char* cmd, const char* arg)
     Serial2.write(reinterpret_cast<const uint8_t*>(frame), static_cast<size_t>(n));
     Serial2.flush();
     ++gSent;
-    Serial.printf("[AMI] -> %s %s\n", cmd, (arg != nullptr) ? arg : "");
 }
 
 /* Tracta una linia sencera vinguda de la pantalla. */
@@ -54,11 +57,9 @@ void handleLine(char* line)
     char    arg[TgLink::kMaxArg];
     if (!TgLink::parseFrame(line, &pseq, cmd, sizeof(cmd), arg, sizeof(arg))) {
         ++gBad;
-        Serial.printf("[AMI] descartada: %s\n", line);
-        return;
+        return;                       /* soroll o linia malmesa: la ignorem */
     }
     ++gRecv;
-    Serial.printf("[AMI] <- %s %s\n", cmd, arg);
 
     if (strcmp(cmd, "PING") == 0) {
         char up[40];
@@ -85,22 +86,27 @@ void setup()
     delay(200);
     Serial.println();
     Serial.println(F("=== Xip amic del Tamagoxi ==="));
-    Serial.printf("Enllac: TX %d -> GPIO 34 de la pantalla, RX %d <- GPIO 32\n", kTxPin, kRxPin);
+    Serial.println(F("Enllac: TX IO1 -> RX de la pantalla, RX IO3 <- TX de la pantalla"));
+    Serial.println(F("Nomes 3 fils: TX, RX i GND (no connectis el 5V)"));
 
     pinMode(kLedPin, OUTPUT);
     digitalWrite(kLedPin, HIGH);        /* el LED de la placa sol ser actiu baix */
 
-    Serial2.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
-    Serial.printf("[AMI] enllac obert a %u bauds\n", static_cast<unsigned>(TgLink::kBaud));
+    /* Els primers segons, consola normal; despres passam l'UART0 a l'enllac
+     * (son els mateixos pins del USB, no poden conviure). */
+    Serial.printf("[AMI] passant a l'enllac en %u ms\n", static_cast<unsigned>(kConsoleMs));
+    Serial.flush();
+    delay(kConsoleMs);
 
+    Serial.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
     reply("HELLO", "amic a punt");
     gLastHello = millis();
 }
 
 void loop()
 {
-    while (Serial2.available() > 0) {
-        const int ch = Serial2.read();
+    while (Serial.available() > 0) {
+        const int ch = Serial.read();
         if (ch < 0) {
             break;
         }
@@ -131,9 +137,6 @@ void loop()
     /* Cada 10 s ens presentam una altra vegada, per si la pantalla ha arrencat mes tard. */
     if (now - gLastHello >= 10000) {
         gLastHello = now;
-        if (gRecv == 0) {
-            Serial.println(F("[AMI] encara no m'ha parlat la pantalla (revisa els cables)"));
-        }
         reply("HELLO", "amic a punt");
     }
 }

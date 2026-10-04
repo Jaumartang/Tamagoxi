@@ -19,6 +19,8 @@ uint32_t gSent = 0;
 uint32_t gRecv = 0;
 uint32_t gBad = 0;
 uint32_t gLastPing = 0;
+bool     gWasOnline = false;
+bool     gActive = false;      /* l'enllac nomes funciona si l'han engegat */
 
 void noteError(const char* text)
 {
@@ -61,9 +63,18 @@ void begin()
     gLen      = 0;
     gLastSeen = 0;
     gLastPing = 0;
-    Serial1.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
-    Serial.printf("[LINK] enllac obert a %u bauds (TX %d -> 16, RX %d <- 17)\n",
-                  static_cast<unsigned>(TgLink::kBaud), kTxPin, kRxPin);
+    gWasOnline = false;
+    /* L'enllac va per UART0, els MATEIXOS pins del monitor serie: a partir
+     * d'aqui la consola d'aquesta placa queda muda fins que es reiniciï. */
+  Serial.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
+    gActive = true;
+    Serial.printf("#0|HELLO|pantalla a 921600*00\n");
+    Serial.flush();
+}
+
+bool active()
+{
+    return gActive;
 }
 
 bool send(const char* cmd, const char* arg)
@@ -75,9 +86,9 @@ bool send(const char* cmd, const char* arg)
         noteError("marc massa llarg");
         return false;
     }
-    const size_t wrote = Serial1.write(reinterpret_cast<const uint8_t*>(frame),
-                                       static_cast<size_t>(n));
-    Serial1.flush();
+    const size_t wrote = Serial.write(reinterpret_cast<const uint8_t*>(frame),
+                                      static_cast<size_t>(n));
+    Serial.flush();
     if (wrote == static_cast<size_t>(n)) {
         ++gSent;
         return true;
@@ -88,8 +99,11 @@ bool send(const char* cmd, const char* arg)
 
 void update()
 {
-    while (Serial1.available() > 0) {
-        const int ch = Serial1.read();
+    if (!gActive) {
+        return;                   /* si no l'han engegat, no tocam el port */
+    }
+    while (Serial.available() > 0) {
+        const int ch = Serial.read();
         if (ch < 0) {
             break;
         }
@@ -118,15 +132,15 @@ void update()
     }
 
     /* Avisam nomes quan l'enllac apareix o desapareix (per no omplir el log). */
-    static bool wasOnline = false;
     const bool nowOnline = (gLastSeen != 0) && ((millis() - gLastSeen) < 3000);
-    if (nowOnline != wasOnline) {
-        wasOnline = nowOnline;
+    if (nowOnline != gWasOnline) {
+        gWasOnline = nowOnline;
         if (nowOnline) {
-            Serial.printf("[LINK] el xip amic ha contestat: ENLLAC VIU ('%s')\n", gLastMsg);
+            Serial.printf("#0|LOG|enllac viu: %s*00\n", gLastMsg);
         } else {
-            Serial.println(F("[LINK] s'ha perdut l'enllac amb el xip amic"));
+            Serial.println(F("#0|LOG|s'ha perdut l'enllac*00"));
         }
+        Serial.flush();
     }
 }
 
