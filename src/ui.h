@@ -48,6 +48,15 @@ uint8_t themeCount();
 const char* themeName(uint8_t index);
 void setTheme(uint8_t index);
 
+/* Targeta de vidre translucida damunt del fons: la fan servir la UI i els
+ * panells per tenir-ho tot amb el mateix estil. 'pct' = tant per cent del tint
+ * (mes alt = mes ple de color i menys transparent). */
+void glassCard(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radius);
+/* Barreja dos colors RGB565 (pa = % del primer). */
+uint16_t mix(uint16_t a, uint16_t b, uint8_t pa);
+/* Color de text/icona que es llegeix be damunt de 'bg' (clar o fosc). */
+uint16_t inkOn(uint16_t bg);
+
 /* Colors del tema actual (els panells modals també els fan servir). */
 uint16_t colorPanelBg();
 uint16_t colorPanelEdge();

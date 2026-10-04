@@ -127,7 +127,7 @@ bool insideRound(int x, int y, int rx, int ry, int rw, int rh, int r);
 
 /* Pinta una TARGETA DE VIDRE: llegeix el fons i hi barreja 'tint' (translucid).
  * Serveix per a les barres i per al boto MENU: el fons es veu a travers. */
-void glassCard(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radius)
+void glassCardCore(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radius)
 {
     const char* bgName = SpriteRenderer::backgroundName();
     TFT_eSPI& t = gfx();
@@ -247,6 +247,27 @@ void begin()
     /* Res a inicialitzar; l'estat el porta aquest modul. */
 }
 
+/* Targeta de vidre translucida damunt del fons (per a la UI i els panells). */
+void glassCard(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radius)
+{
+    glassCardCore(x, y, w, h, tint, pct, radius);
+}
+
+/* Barreja dos colors RGB565: 'pa' per cent del primer. */
+uint16_t mix(uint16_t a, uint16_t b, uint8_t pa)
+{
+    return blend565(a, b, pa);
+}
+
+/* To de text/icona que es llegeix be damunt de 'bg'. */
+uint16_t inkOn(uint16_t bg)
+{
+    const uint16_t r = ((bg >> 11) & 0x1F) * 255 / 31;
+    const uint16_t g = ((bg >> 5) & 0x3F) * 255 / 63;
+    const uint16_t b = (bg & 0x1F) * 255 / 31;
+    return ((r * 299 + g * 587 + b * 114) / 1000 > 140) ? 0x2104 : TFT_WHITE;
+}
+
 uint8_t themeCount()
 {
     return kThemeCount;
@@ -316,58 +337,70 @@ void drawHud(const Hud& hud)
     gHudDrawn = true;
 
     TFT_eSPI& t = gfx();
-    t.fillRect(0, UI_HUD_TOP, SCREEN_W, UI_HUD_H, th().panelBg);
-    t.drawLine(0, UI_HUD_H - 1, SCREEN_W - 1, UI_HUD_H - 1, th().panelEdge);
 
-    /* Hora (esquerra). */
+    /* Barra de vidre clar translucida (es veu el fons a traves). */
+    glassCard(0, UI_HUD_TOP, SCREEN_W, UI_HUD_H, 0xFFFF, 62, 0);
+    const uint16_t glass = mix(0xFFFF, 0xD69A, 62);      /* el vidre, aprox. */
+    const uint16_t ink   = 0x2104;                       /* fosc: el vidre es clar */
+
+    /* Hora (esquerra), amb ombra blanca perque es llegeixi be. */
     char buf[16];
     t.setTextDatum(ML_DATUM);
     t.setTextFont(4);
-    t.setTextColor(TFT_WHITE, th().panelBg);
     if (hud.timeValid) {
         snprintf(buf, sizeof(buf), "%02u:%02u", static_cast<unsigned>(hud.hour),
                  static_cast<unsigned>(hud.minute));
     } else {
-        snprintf(buf, sizeof(buf), "--:--");
+        strlcpy(buf, "--:--", sizeof(buf));
     }
+    t.setTextColor(0xFFFF, glass);
+    t.drawString(buf, 7, UI_HUD_TOP + UI_HUD_H / 2 + 1);
+    t.setTextColor(ink, glass);
     t.drawString(buf, 6, UI_HUD_TOP + UI_HUD_H / 2);
 
     /* Temps (centre): solet + temperatura. */
     if (hud.weatherValid) {
         snprintf(buf, sizeof(buf), "%d", hud.temperature);
         const int tx = SCREEN_W / 2 - 4;
-        t.fillCircle(tx - 18, UI_HUD_TOP + UI_HUD_H / 2, 8, 0xFFE0);
+        const int ty = UI_HUD_TOP + UI_HUD_H / 2;
+        t.fillCircle(tx - 18, ty, 8, 0xFFE0);
+        t.drawCircle(tx - 18, ty, 9, 0xFD20);
         t.setTextDatum(ML_DATUM);
         t.setTextFont(4);
-        t.setTextColor(TFT_WHITE, th().panelBg);
-        t.drawString(buf, tx, UI_HUD_TOP + UI_HUD_H / 2);
-        t.drawCircle(tx + t.textWidth(buf) + 5, UI_HUD_TOP + UI_HUD_H / 2 - 8, 4, TFT_WHITE);
+        t.setTextColor(0xFFFF, glass);
+        t.drawString(buf, tx + 1, ty + 1);
+        t.setTextColor(ink, glass);
+        t.drawString(buf, tx, ty);
+        t.drawCircle(tx + t.textWidth(buf) + 5, ty - 8, 4, 0xFD20);
     } else {
         t.setTextDatum(MR_DATUM);
         t.setTextFont(2);
-        t.setTextColor(kDim, th().panelBg);
+        t.setTextColor(0x9CD3, glass);
         t.drawString("--", SCREEN_W / 2, UI_HUD_TOP + UI_HUD_H / 2);
     }
 
     /* WiFi (dreta, abans del boto de menu): 3 barres d'intensitat. */
-    const int wx = SCREEN_W - 78;
-    const int wy = UI_HUD_TOP + UI_HUD_H - 9;
-    const uint16_t wc = hud.wifi ? TFT_GREEN : 0x39E7;
+    const int wx = SCREEN_W - 80;
+    const int wy = UI_HUD_TOP + UI_HUD_H - 8;
     for (int i = 0; i < 3; ++i) {
-        const int bh = 5 + i * 5;
-        t.fillRect(wx + i * 7, wy - bh, 5, bh, wc);
+        const int bh = 4 + i * 4;
+        t.fillRect(wx + i * 6, wy - bh, 4, bh, 0x3186);
+        if (hud.wifi) {
+            t.fillRect(wx + i * 6 + 1, wy - bh + 1, 2, bh - 1, 0x07E0);
+        }
     }
 
-    /* Boto de menu (dreta): 3 ratlles sobre fons destacat. */
-    const int mbx = SCREEN_W - 42;
+    /* Boto de menu (dreta): targeta rosa viva amb tres ratlles ben visibles. */
+    const int mbx = SCREEN_W - 44;
     const int mby = UI_HUD_TOP + 2;
-    const int mbw = 38;
-    const int mbh = UI_HUD_H - 4;
-    t.fillRoundRect(mbx, mby, mbw, mbh, 5, th().accent);
+    const int mbw = 40;
+    const int mbh = UI_HUD_H - 5;
+    t.fillRoundRect(mbx, mby, mbw, mbh, 8, 0xF81F);
+    t.drawRoundRect(mbx, mby, mbw, mbh, 8, mix(0xF81F, 0x0000, 45));
     const int mbcx = mbx + mbw / 2;
     const int mbcy = mby + mbh / 2;
     for (int i = -1; i <= 1; ++i) {
-        t.fillRect(mbcx - 9, mbcy + i * 6 - 1, 18, 2, TFT_WHITE);
+        t.fillRoundRect(mbcx - 11, mbcy + i * 6 - 1, 22, 3, 1, TFT_WHITE);
     }
 }
 

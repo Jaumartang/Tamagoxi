@@ -304,8 +304,10 @@ void drawWifiMessage();
 void drawTopMenu()
 {
     TFT_eSPI& t = tft();
-    t.fillRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelBg());
-    t.drawRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelEdge());
+
+    /* Panell de vidre clar i, a dins, cada fila una targeta de vidre tenyida
+     * amb el seu color (el fons es veu a travers). */
+    Ui::glassCard(kMenuX, kMenuY, kMenuW, kMenuH, 0xFFFFFF, 66, 14);
 
     const char* labels[kMenuRows] = {"WiFi", "Musica", "Bluetooth", "Missatges",
                                      "Jocs", "Ajustos", "Sobre"};
@@ -313,8 +315,8 @@ void drawTopMenu()
         const int x = kMenuX + 4;
         const int y = kMenuY + 4 + i * (kRowH + kRowGap);
         const int w = kMenuW - 8;
-        const uint16_t col = Ui::colorRow(static_cast<uint8_t>(i));
-        t.fillRoundRect(x, y, w, kRowH, 8, col);
+        const uint16_t col = Ui::mix(Ui::colorRow(static_cast<uint8_t>(i)), 0x0000, 30);
+        Ui::glassCard(x, y, w, kRowH, col, 82, 10);
 
         const int icx = x + 24;
         const int icy = y + kRowH / 2;
