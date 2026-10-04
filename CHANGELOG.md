@@ -1,0 +1,71 @@
+# Canvis del projecte (CHANGELOG)
+
+Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
+
+## Fase 9 — Missatges al mòbil
+- Enviar missatges des del Tamagoxi (Telegram), amb una **llista de números**
+  seleccionats i avisos automàtics del drac (gana, malaltia, tristesa, canyera).
+- **Rebre** missatges: la placa pregunta cada 10 s i surt una **finestreta** a la
+  pantalla amb el missatge (20 s o fins que es toca).
+- **Sistema de notificacions**: avisos a la pantalla per als missatges i per a
+  les necessitats del drac, i **panell de Missatges** al menú de dalt (amb
+  comptador de pendents). Comandes: `msg`, `msg inbox`, `msg add/del`, `msg test`.
+
+## Fase 8 — Pujar fitxers per WiFi
+- **Servidor web** a la placa: llista i esborra fitxers de la SD i n'hi puja de
+  nous des del navegador del mòbil (música, fons, mascotes) — a
+  `http://tamagoxi.local` o, amb punt d'accés propi, a `http://192.168.4.1`.
+- Comandes: `web [on|off|status]`, `ap [off]`, `webtest`, `webdump`.
+- **Panell de Bluetooth** al menú: **escaneig** dels aparells d'àudio del
+  voltant (nom i senyal) i **enllaçament amb un toc**; tria auriculars/altaveu i
+  apaga/encén. Comandes: `bt source|sink|off|scan|list|connect`.
+
+## Fase 7 — So i música
+- Reproductor **MP3/WAV** de la carpa `/music` de la SD, amb el desco­dificador
+  `arduino-audio-tools` + `libhelix`, en una tasca pròpia (la mascota no s'hi
+  encalla mai).
+- Sortida pel **DAC intern** (GPIO26 → amplificador FM8002E de la placa) i pels
+  **auriculars/altaveus Bluetooth** (emissor A2DP).
+- **Panell de Música**: cançó actual amb temps i barra de progrés, transport,
+  volum i llista de cançons.
+
+## Fase 6.5 — Menús i panells
+- **Desplegable de dalt** (botó de ratlles del HUD) amb 7 opcions: WiFi, Música,
+  Bluetooth, Missatges, Jocs, Ajustos i Sobre.
+- **Panell de WiFi**: llista de xarxes (senyal i cadenat), **teclat en pantalla**
+  (majúscules, números i símbols), mostrar/amagar contrasenya i connexió amb
+  resultat.
+- **Ajustos**: tema de colors (rosa-lila, nit violeta, rosa pastel), fons de la
+  pantalla (inclòs "automàtic segons la meteo") i brillantor. Es desa a la NVS.
+
+## Fase 6 — Xarxa
+- **WiFi + NTP + meteo** (Open-Meteo) en una tasca pròpia del nucli 0, amb
+  caché a la NVS i reintents. El HUD mostra l'hora i la temperatura.
+- Comandes: `wifi`, `net`, `meteo`, `geo`, `wifiprobe`.
+
+## Fase 5 — El joc
+- Necessitats de la mascota (menjar, felicitat, energia, salut) que passen amb
+  el temps, amb **memòria a la NVS**: sobreviuen als reinicis.
+- Accions: **Menjar · Jugar · Dormir · Curar**, amb animacions i efectes.
+
+## Fase 4 — Interfície i tàctil
+- HUD (hora, meteo, WiFi), **4 barres** de necessitats i botons grans.
+- **Tàctil XPT2046**: calibratge guiat, llindar de pressió ajustable i mapa
+  cru→píxels desat a la NVS.
+- Paleta i temes rosa/lila (pensats per a la Noa).
+
+## Fases 1–3 — Base, fons i mascota
+- **Placa**: ESP32-WROOM-32E (LCDWiki E32R40T / ESP32-32E) amb ST7796S 320x480
+  per HSPI, SD a 25 MHz i amplificador FM8002E. PlatformIO + Arduino + TFT_eSPI.
+- **Fons** de 307.200 B pintats per **streaming** en franges (no caben a RAM).
+- **Mascota**: sprite de 128x128 ampliat 2x, composat sobre el fons amb
+  transparència, per franges i llegint de la SD (fps ajustable).
+- `wavgen`, `beep`, `shot`, `tap`, `sd`, `lssd`, `bg`, `pet`, `anim`... per
+  provar-ho tot des del port sèrie, i utilitats a `tools/` per fer proves
+  automàtiques de la UI (tocs simulats i captures de pantalla).
+
+---
+
+> Memòria: aquesta placa **no té PSRAM**, així que el projecte està afinat al
+> kB (buffers de franges, decodificador, pila Bluetooth...). Detalls de cada
+> decisió al `README.md`.
