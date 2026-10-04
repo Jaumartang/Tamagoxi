@@ -121,6 +121,45 @@ void iconHeart(int cx, int cy, int s, uint16_t col)
 }
 
 /* Una fila de barra (compacta): icona + barra rodona + valor numeric. */
+/* (declarats abans: glassCard els fa servir) */
+uint16_t blend565(uint16_t a, uint16_t b, uint8_t pa);
+bool insideRound(int x, int y, int rx, int ry, int rw, int rh, int r);
+
+/* Pinta una TARGETA DE VIDRE: llegeix el fons i hi barreja 'tint' (translucid).
+ * Serveix per a les barres i per al boto MENU: el fons es veu a travers. */
+void glassCard(int x, int y, int w, int h, uint16_t tint, uint8_t pct, int radius)
+{
+    const char* bgName = SpriteRenderer::backgroundName();
+    TFT_eSPI& t = gfx();
+    if (bgName == nullptr || bgName[0] == '\0' || !BgRenderer::beginStrip(bgName)) {
+        t.fillRoundRect(x, y, w, h, radius, tint);     /* sense SD: pla */
+        t.drawRoundRect(x, y, w, h, radius, blend565(tint, 0xFFFF, 70));
+        return;
+    }
+
+    uint8_t srck[320 * 2];
+    uint8_t outk[320 * 2];
+    t.startWrite();
+    t.setAddrWindow(x, y, w, h);
+    for (int ry = y; ry < y + h; ++ry) {
+        if (!BgRenderer::readStripRow(ry, x, w, srck)) {
+            break;
+        }
+        for (int i = 0; i < w; ++i) {
+            const uint16_t b = static_cast<uint16_t>((srck[i * 2] << 8) | srck[i * 2 + 1]);
+            uint16_t c = b;
+            if (insideRound(i, ry, 0, y, w, h, radius)) {
+                c = blend565(tint, c, pct);
+            }
+            outk[i * 2]     = static_cast<uint8_t>(c >> 8);
+            outk[i * 2 + 1] = static_cast<uint8_t>(c & 0xFF);
+        }
+        t.pushPixels(reinterpret_cast<uint16_t*>(outk), w);
+    }
+    t.endWrite();
+    BgRenderer::endStrip();
+}
+
 /* Barreja dos colors RGB565: 'pa' per cent del primer. */
 uint16_t blend565(uint16_t a, uint16_t b, uint8_t pa)
 {
@@ -342,69 +381,18 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
     const int areaH = UI_BARS_BOT - UI_BARS_TOP;     /* 84 px */
     const int rowH  = areaH / 4;                     /* 21 px per barra */
 
-    const char* bgName = SpriteRenderer::backgroundName();
-    const bool glass = (bgName != nullptr && bgName[0] != '\0')
-                       && BgRenderer::beginStrip(bgName);
-
-    constexpr int kCardX = 2;
-    constexpr int kCardW = UI_BARS_PANEL_R - 4;
-    constexpr int kCardR = 9;
+    /* Trossos comuns (geometria de la pista). */
     constexpr int kTx = 36;
     constexpr int kTw = 152;
     constexpr int kTh = 13;
     constexpr int kTr = 6;
 
     TFT_eSPI& t = gfx();
-    if (!glass) {
-        t.fillRect(0, UI_BARS_TOP, UI_BARS_PANEL_R, areaH, th().panelBg);
-    } else {
-        t.startWrite();
-        t.setAddrWindow(0, UI_BARS_TOP, UI_BARS_PANEL_R, areaH);
-    }
 
-    uint8_t src[UI_BARS_PANEL_R * 2];
-    uint8_t out[UI_BARS_PANEL_R * 2];
-
+    /* Cada barra va dins una TARGETA DE VIDRE CLAR (blanc translucid): aixi el
+     * fons es veu a travers pero tot te contrast. */
     for (int i = 0; i < 4; ++i) {
-        const int top   = UI_BARS_TOP + i * rowH;
-        const int cy    = top + rowH / 2;
-        const uint8_t v = (vals[i] > 100) ? 100 : vals[i];
-        const uint16_t col = kCols[i];
-        const int cardY = top + 1;
-        const int cardH = rowH - 3;
-        const int ty    = cy - kTh / 2;
-        const int fillW = (kTw * v) / 100;
-
-        if (!glass) {
-            t.fillRoundRect(kCardX, cardY, kCardW, cardH, kCardR, th().panelBg);
-            t.fillRoundRect(kTx, ty, kTw, kTh, kTr, th().barTrack);
-            if (fillW > 4) {
-                t.fillRoundRect(kTx, ty, fillW, kTh, kTr, col);
-            }
-            continue;
-        }
-
-        for (int y = top; y < top + rowH; ++y) {
-            if (!BgRenderer::readStripRow(y, 0, UI_BARS_PANEL_R, src)) {
-                break;
-            }
-            for (int x = 0; x < UI_BARS_PANEL_R; ++x) {
-                const uint16_t b =
-                    static_cast<uint16_t>((src[x * 2] << 8) | src[x * 2 + 1]);
-                uint16_t c = b;
-                if (insideRound(x, y, kCardX, cardY, kCardW, cardH, kCardR)) {
-                    c = blend565(th().panelBg, c, 58);      /* vidre */
-                }
-                out[x * 2]     = static_cast<uint8_t>(c >> 8);
-                out[x * 2 + 1] = static_cast<uint8_t>(c & 0xFF);
-            }
-            t.pushPixels(reinterpret_cast<uint16_t*>(out), UI_BARS_PANEL_R);
-        }
-    }
-
-    if (glass) {
-        t.endWrite();
-        BgRenderer::endStrip();
+        glassCard(0, UI_BARS_TOP + i * rowH + 1, UI_BARS_PANEL_R, rowH - 3, 0xFFFF, 46, 9);
     }
 
     /* La pista i l'omplert, opacs al damunt del vidre (aixi els colors son
@@ -416,38 +404,42 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
         const int ty    = cy - kTh / 2;
         const int fillW = (kTw * v) / 100;
 
-        t.fillRoundRect(kTx, ty, kTw, kTh, kTr, th().barTrack);
+        t.fillRoundRect(kTx, ty, kTw, kTh, kTr, blend565(th().barTrack, 0xFFFF, 35));
         if (fillW > 6) {
             t.fillRoundRect(kTx, ty, fillW, kTh, kTr, col);
             /* Brillantor de dalt i ombra de baix: sembla un tub de vidre. */
-            const uint16_t lite = blend565(col, 0xFFFF, 55);
-            const uint16_t dark = blend565(col, 0x0000, 35);
-            if (fillW > 14) {
-                t.fillRoundRect(kTx + 3, ty + 2, fillW - 6, 3, 2, lite);
+            const uint16_t lite = blend565(col, 0xFFFF, 62);
+            const uint16_t dark = blend565(col, 0x0000, 32);
+            if (fillW > 16) {
+                t.fillRoundRect(kTx + 3, ty + 2, fillW - 6, 4, 2, lite);
                 t.fillRoundRect(kTx + 3, ty + kTh - 4, fillW - 6, 2, 1, dark);
             }
+            /* Vora fosca: fa ressaltar l'omplert damunt del vidre clar. */
+            t.drawRoundRect(kTx, ty, fillW, kTh, kTr, blend565(col, 0x0000, 45));
         }
     }
 
-    /* Icones i numeros al damunt (opacs: es llegeixen millor). */
-    const uint16_t cardCol = blend565(th().panelBg, 0x18E3, 58);
+    /* Icones i numeros al damunt: colors foscos (el vidre es clar) perque es
+     * llegeixin be, amb una ombra blanca que els fa ressaltar. */
+    const uint16_t cardCol = 0xD69A;                       /* el vidre clar */
     for (int i = 0; i < 4; ++i) {
         const int cy = UI_BARS_TOP + i * rowH + rowH / 2;
         const uint8_t v = (vals[i] > 100) ? 100 : vals[i];
-        const uint16_t col = kCols[i];
+        const uint16_t col  = kCols[i];
+        const uint16_t deep = blend565(col, 0x0000, 42);   /* versio fosca */
         switch (i) {
-            case 0: iconApple(16, cy, 11, col, cardCol); break;
-            case 1: iconSmiley(16, cy, 6, col); break;
-            case 2: iconBattery(16, cy, 11, col, v); break;
-            default: iconHeart(16, cy, 12, col); break;
+            case 0: iconApple(16, cy, 11, deep, cardCol); break;
+            case 1: iconSmiley(16, cy, 6, deep); break;
+            case 2: iconBattery(16, cy, 11, deep, v); break;
+            default: iconHeart(16, cy, 12, deep); break;
         }
         char buf[8];
         snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(v));
         t.setTextDatum(MR_DATUM);
         t.setTextFont(2);
-        t.setTextColor(0x0000, cardCol);
-        t.drawString(buf, UI_BARS_PANEL_R - 5, cy + 1);     /* ombra del numero */
-        t.setTextColor(col, cardCol);
+        t.setTextColor(0xFFFF, cardCol);
+        t.drawString(buf, UI_BARS_PANEL_R - 5, cy + 1);     /* ombra blanca */
+        t.setTextColor(deep, cardCol);
         t.drawString(buf, UI_BARS_PANEL_R - 6, cy);
     }
 
@@ -518,21 +510,24 @@ void drawMenuButton()
     const int w = SCREEN_W - x;
     const int h = UI_MENU_BTN_BOT - y;
 
-    TFT_eSPI& t = gfx();
-    t.fillRect(x, y, w, h, th().accent);
-    t.drawLine(x, y, x, y + h - 1, th().panelEdge);
-    t.drawLine(x, y, SCREEN_W - 1, y, th().panelEdge);
+    /* La mateixa targeta de vidre clar que les barres: tot lliga. */
+    glassCard(x + 2, y + 1, w - 4, h - 3, 0xFFFF, 46, 12);
 
+    TFT_eSPI& t = gfx();
+    /* Tres ratlles gruixudes i vives (amb ombra perque ressaltin). */
     const int hxc = x + w / 2;
-    const int hy = y + 13;
+    const int hy  = y + 30;
     for (int i = -1; i <= 1; ++i) {
-        t.fillRect(hxc - 12, hy + i * 7 - 1, 24, 3, TFT_WHITE);
+        t.fillRoundRect(hxc - 20, hy + i * 12 - 2, 40, 6, 3, 0xFFFF);
+        t.fillRoundRect(hxc - 20, hy + i * 12 - 1, 40, 5, 3, 0xF81F);
     }
 
     t.setTextDatum(MC_DATUM);
-    t.setTextFont(1);
-    t.setTextColor(TFT_WHITE, th().accent);
-    t.drawString("MENU", hxc, y + 34);
+    t.setTextFont(2);
+    t.setTextColor(0xFFFF, 0xD69A);
+    t.drawString("MENU", hxc, y + 67);
+    t.setTextColor(blend565(0xF81F, 0x0000, 40), 0xD69A);
+    t.drawString("MENU", hxc, y + 66);
 }
 
 void drawMenu(bool sleeping)

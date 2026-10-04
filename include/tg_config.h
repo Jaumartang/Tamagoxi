@@ -153,7 +153,7 @@ static constexpr int UI_BARS_BOT     = 480;
 static constexpr int UI_BARS_PANEL_R = 232;   /* limit de barres/botons d'accio */
 
 static constexpr int UI_MENU_BTN_L   = 232;   /* boto MENU / tancar */
-static constexpr int UI_MENU_BTN_TOP = 436;
+static constexpr int UI_MENU_BTN_TOP = UI_BARS_TOP;   /* a l'alcada de les barres */
 static constexpr int UI_MENU_BTN_BOT = 480;
 
 /* Franja de barres compactes quan el menu es obert (a sota dels botons). */
