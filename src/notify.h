@@ -75,6 +75,9 @@ bool            takeNew();
 /* Forca una comprovacio ara (la fa igualment la tasca de xarxa cada 10 s). */
 void            pollNow();
 uint32_t        receivedCount();
+/* Missatges sense llegir i esborrar la safata. */
+uint8_t         unreadCount();
+void            clearInbox();
 
 /* Nomes per provar la finestreta sense cap bot: entra un missatge com si
  * hagues arribat del mobil. */

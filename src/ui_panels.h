@@ -23,7 +23,10 @@
 
 namespace Panels {
 
-enum class Id : uint8_t { None, TopMenu, Wifi, Music, Bluetooth, Settings, About, Games, Message };
+enum class Id : uint8_t { None, TopMenu, Wifi, Music, Bluetooth, Messages, Settings, About, Games, Message };
+
+/* Finestreta d'avis (notificacio): un titol i un text que surten sols. */
+void setNotice(const char* title, const char* text);
 
 /* Callbacks que main registra perque els panells puguin aplicar canvis. */
 struct Hooks {

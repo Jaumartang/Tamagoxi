@@ -116,6 +116,7 @@ int64_t           gLastUpdateId = 0;
 uint32_t          gLastPollMs    = 0;
 volatile bool     gInboxNew     = false;
 volatile uint32_t gReceived     = 0;
+volatile uint8_t  gUnread       = 0;
 
 void addInbox(const char* from, const char* text)
 {
@@ -130,6 +131,9 @@ void addInbox(const char* from, const char* text)
     }
     gInboxNew = true;
     ++gReceived;
+    if (gUnread < 99) {
+        ++gUnread;
+    }
     Serial.printf("[MSG] rebut de %s: %s\n", from, text);
 }
 
@@ -421,7 +425,21 @@ bool takeNew()
         return false;
     }
     gInboxNew = false;
+    gUnread   = 0;
     return true;
+}
+
+uint8_t unreadCount()
+{
+    return gUnread;
+}
+
+void clearInbox()
+{
+    gInboxCount = 0;
+    gUnread     = 0;
+    gInboxNew   = false;
+    Serial.println(F("[MSG] safata esborrada"));
 }
 
 void pollNow()

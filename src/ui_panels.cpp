@@ -35,7 +35,7 @@ constexpr int kMenuY = UI_HUD_H;
 constexpr int kMenuW = 208;
 constexpr int kRowH  = 44;
 constexpr int kRowGap = 4;
-constexpr int kMenuRows = 6;
+constexpr int kMenuRows = 7;
 constexpr int kMenuH = 4 + kMenuRows * kRowH + (kMenuRows - 1) * kRowGap + 4;   /* 244 */
 
 /* --- Panell de musica ------------------------------------------------------ */
@@ -250,6 +250,15 @@ void iconInfo(int cx, int cy)
     t.fillRect(cx - 1, cy - 1, 3, 7, kText);
 }
 
+/* Sobre (carta) per al menu de missatges. */
+void iconMail(int cx, int cy)
+{
+    TFT_eSPI& t = tft();
+    t.drawRect(cx - 8, cy - 6, 16, 12, kText);
+    t.drawLine(cx - 8, cy - 6, cx, cy + 1, kText);
+    t.drawLine(cx + 7, cy - 6, cx, cy + 1, kText);
+}
+
 /* Runa del Bluetooth (barra central + dues diagonals). */
 void iconBluetooth(int cx, int cy)
 {
@@ -269,6 +278,8 @@ void showBluetooth();
 void drawBluetooth();
 void showMessage();
 void drawMessage();
+void showMessages();
+void drawMessages();
 void drawMusicTime();
 void saveBtSnapshot();
 bool btChanged();
@@ -295,7 +306,8 @@ void drawTopMenu()
     t.fillRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelBg());
     t.drawRoundRect(kMenuX, kMenuY, kMenuW, kMenuH, 10, Ui::colorPanelEdge());
 
-    const char* labels[kMenuRows] = {"WiFi", "Musica", "Bluetooth", "Jocs", "Ajustos", "Sobre"};
+    const char* labels[kMenuRows] = {"WiFi", "Musica", "Bluetooth", "Missatges",
+                                     "Jocs", "Ajustos", "Sobre"};
     for (int i = 0; i < kMenuRows; ++i) {
         const int x = kMenuX + 4;
         const int y = kMenuY + 4 + i * (kRowH + kRowGap);
@@ -309,13 +321,15 @@ void drawTopMenu()
             case 0: iconWifi(icx, icy, Net::connected()); break;
             case 1: iconMusic(icx, icy); break;
             case 2: iconBluetooth(icx, icy); break;
-            case 3: iconGame(icx, icy); break;
-            case 4: iconSliders(icx, icy); break;
+            case 3: iconMail(icx, icy); break;
+            case 4: iconGame(icx, icy); break;
+            case 5: iconSliders(icx, icy); break;
             default: iconInfo(icx, icy); break;
         }
 
-        /* Segona linia d'estat (WiFi i Bluetooth). */
+        /* Segona linia d'estat (WiFi, Bluetooth i Missatges). */
         const char* sub = nullptr;
+        char subBuf[24];
         if (i == 0) {
             sub = Net::connected() ? "connectat"
                                    : (Net::hasCredentials() ? "desconnectat" : "sense configurar");
@@ -325,6 +339,15 @@ void drawTopMenu()
                 case Audio::BtMode::Sink:   sub = "altaveu";    break;
                 default:                    sub = "apagat";     break;
             }
+        } else if (i == 3) {
+            const uint8_t unread = Notify::unreadCount();
+            if (unread > 0) {
+                snprintf(subBuf, sizeof(subBuf), "%u sense llegir", static_cast<unsigned>(unread));
+            } else {
+                snprintf(subBuf, sizeof(subBuf), "%u a la safata",
+                         static_cast<unsigned>(Notify::inboxCount()));
+            }
+            sub = subBuf;
         }
 
         t.setTextDatum(ML_DATUM);
@@ -983,6 +1006,10 @@ void drawGames()
 
 bool gListDrawn = false;
 uint32_t gTimer = 0;
+bool     gHasNotice   = false;      /* la finestreta ensenya un avis, no un missatge */
+char     gNoticeTitle[40];
+char     gNoticeText[180];
+int8_t   gMsgIndex    = 0;          /* quin missatge de la safata s'ensenya */
 uint8_t  gMusicIdx     = 0xFF;   /* per no repintar el panell de musica sense motiu */
 uint8_t  gMusicCount   = 0xFF;
 bool     gMusicPlaying = false;
@@ -1321,6 +1348,7 @@ const char* name(Id id)
         case Id::Wifi:     return "wifi";
         case Id::Music:    return "musica";
         case Id::Bluetooth: return "bluetooth";
+        case Id::Messages:  return "missatges";
         case Id::Message:   return "missatge";
         case Id::Settings: return "ajustos";
         case Id::About:    return "sobre";
@@ -1376,56 +1404,113 @@ void showBluetooth()
     drawBluetooth();
 }
 
+/* --- Panell de missatges (la safata) -------------------------------------- */
+
+constexpr int kMsgRowY = 92;
+constexpr int kMsgRowH = 54;
+constexpr int kMsgRows = 5;
+constexpr int kMsgBtnY = 370;
+constexpr int kMsgBtnH = 44;
+
+void drawMessages()
+{
+    TFT_eSPI& t = tft();
+    t.fillRect(0, 0, SCREEN_W, SCREEN_H, Ui::colorPanelBg());
+    drawTitleBar("Missatges");
+
+    char st[80];
+    snprintf(st, sizeof(st), "%s - %u numeros - %u sense llegir",
+             Notify::enabled() ? "activat" : "aturat",
+             static_cast<unsigned>(Notify::recipientCount()),
+             static_cast<unsigned>(Notify::unreadCount()));
+    t.setTextDatum(ML_DATUM);
+    t.setTextFont(2);
+    t.setTextColor(kDimText, Ui::colorPanelBg());
+    t.drawString(st, 12, 60);
+
+    for (uint8_t i = 0; i < kMsgRows; ++i) {
+        const int ry = kMsgRowY + i * kMsgRowH;
+        const Notify::InboxMsg* m = Notify::inbox(i);
+        if (m == nullptr) {
+            if (i == 0) {
+                t.setTextFont(1);
+                t.setTextColor(kDimText, Ui::colorPanelBg());
+                t.drawString("Encara no hi ha cap missatge a la safata.", 16, ry + 16);
+            }
+            continue;
+        }
+        const uint16_t bg = Ui::colorTrack();
+        const int rh = kMsgRowH - 6;
+        t.fillRoundRect(8, ry, SCREEN_W - 16, rh, 8, bg);
+        t.setTextFont(1);
+        t.setTextColor(kDimText, bg);
+        t.drawString(m->from, 16, ry + 13);
+        t.setTextFont(2);
+        t.setTextColor(kText, bg);
+        char txt[30];
+        strlcpy(txt, m->text, sizeof(txt));
+        t.drawString(txt, 16, ry + 33);
+    }
+
+    drawButton(8, kMsgBtnY, 148, kMsgBtnH, "Esborra", Ui::colorRow(1));
+    drawButton(164, kMsgBtnY, 148, kMsgBtnH, "Tanca", Ui::colorClose());
+}
+
+void showMessages()
+{
+    gId    = Id::Messages;
+    gTimer = millis();
+    Serial.println(F("[UI] panell de missatges"));
+    drawMessages();
+}
+
 /* --- Finestreta del missatge que ens ha arribat del mobil ----------------- */
 
 void drawMessage()
 {
     TFT_eSPI& t = tft();
     t.fillRect(0, 0, SCREEN_W, SCREEN_H, Ui::colorPanelBg());
-    drawTitleBar("Missatge");
+    drawTitleBar(gHasNotice ? gNoticeTitle : "Missatge");
 
-    const Notify::InboxMsg* m = Notify::inbox(0);
+    const Notify::InboxMsg* m = gHasNotice ? nullptr : Notify::inbox(gMsgIndex);
+    const char* body = gHasNotice ? gNoticeText : "";
 
     t.setTextDatum(ML_DATUM);
-    t.setTextFont(1);
-    t.setTextColor(kDimText, Ui::colorPanelBg());
     if (m != nullptr) {
         char who[40];
         snprintf(who, sizeof(who), "De: %s", m->from);
+        t.setTextFont(1);
+        t.setTextColor(kDimText, Ui::colorPanelBg());
         t.drawString(who, 14, 58);
-    } else {
-        t.drawString("(cap missatge)", 14, 58);
+        body = m->text;
     }
 
     t.setTextFont(2);
     t.setTextColor(kText, Ui::colorPanelBg());
-    if (m != nullptr) {
-        /* El text, trencat en linies de 36 caracters per paraules. */
+    const char* p = body;
+    int y = (m != nullptr) ? 90 : 70;
+    while (*p != '\0' && y < 396) {
+        size_t n = 0;
+        while (p[n] != '\0' && n < 36) {
+            ++n;
+        }
+        if (p[n] != '\0') {
+            size_t k = n;
+            while (k > 8 && p[k] != ' ') {
+                --k;
+            }
+            if (k > 8) {
+                n = k;
+            }
+        }
         char line[40];
-        const char* p = m->text;
-        int y = 90;
-        while (*p != '\0' && y < 396) {
-            size_t n = 0;
-            while (p[n] != '\0' && n < 36) {
-                ++n;
-            }
-            if (p[n] != '\0') {
-                size_t k = n;
-                while (k > 8 && p[k] != ' ') {
-                    --k;
-                }
-                if (k > 8) {
-                    n = k;
-                }
-            }
-            memcpy(line, p, n);
-            line[n] = '\0';
-            t.drawString(line, 16, y);
-            y += 26;
-            p += n;
-            while (*p == ' ') {
-                ++p;
-            }
+        memcpy(line, p, n);
+        line[n] = '\0';
+        t.drawString(line, 16, y);
+        y += 26;
+        p += n;
+        while (*p == ' ') {
+            ++p;
         }
     }
 
@@ -1438,6 +1523,15 @@ void showMessage()
     gTimer = millis();
     Serial.println(F("[UI] finestra de missatge"));
     drawMessage();
+}
+
+/* Avis (notificacio) que surt sol: titol + text. */
+void setNotice(const char* title, const char* text)
+{
+    strlcpy(gNoticeTitle, (title != nullptr) ? title : "Avis", sizeof(gNoticeTitle));
+    strlcpy(gNoticeText, (text != nullptr) ? text : "", sizeof(gNoticeText));
+    gHasNotice = true;
+    showMessage();
 }
 
 void showGames()
@@ -1461,6 +1555,7 @@ void open(Id id)
         case Id::Wifi:     showWifi(); break;
         case Id::Music:    showMusic(); break;
         case Id::Bluetooth: showBluetooth(); break;
+        case Id::Messages:  showMessages(); break;
         case Id::Message:   showMessage(); break;
         case Id::Settings: showSettings(); break;
         case Id::About:    showAbout(); break;
@@ -1474,6 +1569,7 @@ bool close()
     if (gId == Id::None) {
         return false;
     }
+    gHasNotice = false;             /* l'avis ja s'ha vist */
     gId = Id::None;
     return true;
 }
@@ -1573,8 +1669,9 @@ bool handleTap(int16_t x, int16_t y)
                     case 0: showWifi(); break;
                     case 1: showMusic(); break;
                     case 2: showBluetooth(); break;
-                    case 3: showGames(); break;
-                    case 4: showSettings(); break;
+                    case 3: showMessages(); break;
+                    case 4: showGames(); break;
+                    case 5: showSettings(); break;
                     default: showAbout(); break;
                 }
                 return true;
@@ -1802,6 +1899,31 @@ bool handleTap(int16_t x, int16_t y)
         }
         if (y >= 410) {
             return false;           /* Tanca */
+        }
+        return true;
+    }
+
+    /* --- Missatges: safata --- */
+    if (gId == Id::Messages) {
+        /* Una fila: ensenya aquell missatge en gran. */
+        if (y >= kMsgRowY && y < kMsgRowY + kMsgRows * kMsgRowH) {
+            const int row = (y - kMsgRowY) / kMsgRowH;
+            if (row >= 0 && row < static_cast<int>(Notify::inboxCount())) {
+                gHasNotice = false;
+                gMsgIndex  = static_cast<int8_t>(row);
+                showMessage();
+            }
+            return true;
+        }
+        if (y >= kMsgBtnY && y < kMsgBtnY + kMsgBtnH) {
+            if (x >= 8 && x < 156) {              /* Esborra */
+                Notify::clearInbox();
+                drawMessages();
+                return true;
+            }
+            if (x >= 164 && x < 312) {
+                return false;                     /* Tanca */
+            }
         }
         return true;
     }

@@ -64,6 +64,7 @@ uint8_t  gBgIndex = 0;
 uint32_t gBgTimer = 0;
 bool     gTouchWasPressed = false;
 uint32_t gMsgPanelMs      = 0;      /* quan s'ha obert la finestra de missatge */
+uint32_t gNoticeMs        = 0;      /* ultim avis de la mascota */
 uint32_t gPetAnimTimer = 0;
 uint32_t gPetOverlayTimer = 0;
 
@@ -1253,6 +1254,11 @@ void handleCommand(char* cmd)
             }
         } else if (strncmp(arg, "fake ", 5) == 0) {
             Notify::inject("prova", arg + 5);
+        } else if (strcmp(arg, "panel") == 0) {
+            Panels::open(Panels::Id::Messages);
+        } else if (strncmp(arg, "notice ", 7) == 0) {
+            Panels::setNotice("Avis del Tamagoxi", arg + 7);
+            gMsgPanelMs = millis();
         } else if (strcmp(arg, "test") == 0) {
             Notify::send("Prova del Tamagoxi: si llegeixes aixo, els missatges ja funcionen!");
         } else {
@@ -1488,6 +1494,32 @@ void loop()
     /* I es tanca sola si no la tanquen abans. */
     if (Panels::current() == Panels::Id::Message && (millis() - gMsgPanelMs) > 20000) {
         closePanels();
+    }
+
+    /* Notificacio de la mascota: si ho passa malament, surt un avis a la
+     * pantalla tot sol (com a molt un cada 10 minuts). */
+    if (gScreen == Screen::Home && !Panels::isOpen() && (millis() - gNoticeMs) > 600000) {
+        const Pet::Needs& need = Pet::needs();
+        const char* titol = nullptr;
+        char text[170] = {0};
+        if (need.food < 20) {
+            titol = "El drac te gana";
+            snprintf(text, sizeof(text), "Fa estona que no menja (menjar %u de 100). Toca el boto MENJAR!",
+                     need.food);
+        } else if (need.health < 40) {
+            titol = "El drac esta malalt";
+            snprintf(text, sizeof(text), "Necessita cures (salut %u de 100). Toca el boto CURAR!",
+                     need.health);
+        } else if (need.happiness < 20) {
+            titol = "El drac esta trist";
+            snprintf(text, sizeof(text), "Vol jugar una estona (felicitat %u de 100).",
+                     need.happiness);
+        }
+        if (titol != nullptr) {
+            Panels::setNotice(titol, text);
+            gMsgPanelMs = millis();
+            gNoticeMs   = millis();
+        }
     }
 
     /* Si s'ha pujat musica nova pel navegador, refresquem la llista d'aquí (que
