@@ -478,6 +478,51 @@ void drawWifiBottom()
     drawButton(232, kBtnY, 80, kBtnH, "Tanca", Ui::colorClose());
 }
 
+/* Boto petit de la xarxa propia a la capcalera: aixi sempre hi es, tant si
+ * estam veient la llista com si escrivim una contrasenya o esperam la
+ * connexio. Verd = la xarxa propia esta encesa. */
+constexpr int kApTbW = 70;
+constexpr int kApTbX = SCREEN_W - kCloseW - 8 - kApTbW;
+constexpr int kApTbH = kTitleH - 8;
+
+void drawApButton()
+{
+    const bool ap = Net::apMode();
+    drawButton(kApTbX, 4, kApTbW, kApTbH, ap ? "encesa" : "xarxa",
+               ap ? kGood : Ui::colorRow(2));
+}
+
+/* Encen o apaga la xarxa propia. Mentre dura, la mascota deixa anar els seus
+ * buffers (la pila WiFi necessita els ~50 kB) i torna quan s'atura. */
+void toggleAccessPoint()
+{
+    if (Net::apMode()) {
+        /* Aturar el punt d'acces deixa el heap amb forats (la pila WiFi no torna
+         * tot el que va demanar): la mascota ja no hi cap ni amb 100 kB lliures.
+         * Com fa el Bluetooth en apagar-se, el cami net es reiniciar la placa. */
+        Net::stopAccessPoint();
+        TFT_eSPI& t = tft();
+        t.fillRect(0, 0, SCREEN_W, SCREEN_H, Ui::colorPanelBg());
+        t.setTextDatum(MC_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(kGood, Ui::colorPanelBg());
+        t.drawString("Xarxa propia aturada", SCREEN_W / 2, SCREEN_H / 2 - 18);
+        t.setTextFont(1);
+        t.setTextColor(kDimText, Ui::colorPanelBg());
+        t.drawString("reiniciant la placa per tornar el drac...", SCREEN_W / 2, SCREEN_H / 2 + 18);
+        Serial.println(F("[UI] xarxa propia aturada: reiniciant la placa"));
+        delay(1200);
+        ESP.restart();
+    } else {
+        SpriteRenderer::suspend();
+        Net::startAccessPoint("Tamagoxi", nullptr);
+        Serial.printf("[UI] xarxa propia: %s, heap %u kB\n",
+                      Net::apMode() ? "encesa a http://192.168.4.1/"
+                                    : "no s'ha pogut obrir",
+                      static_cast<unsigned>(ESP.getFreeHeap() / 1024));
+    }
+}
+
 void drawWifi()
 {
     TFT_eSPI& t = tft();
@@ -488,9 +533,11 @@ void drawWifi()
         drawWifiStrip();
         drawWifiList();
         drawWifiBottom();
+        drawApButton();
         return;
     }
     drawWifiPassword();
+    drawApButton();
 }
 
 /* --- Teclat en pantalla ---------------------------------------------------- */
@@ -1846,6 +1893,12 @@ bool handleTap(int16_t x, int16_t y)
 
     /* --- WiFi --- */
     if (gId == Id::Wifi) {
+        /* Boto de la xarxa propia de la capcalera: val a totes les vistes. */
+        if (y < kTitleH && x >= kApTbX && x < kApTbX + kApTbW) {
+            toggleAccessPoint();
+            drawWifi();
+            return true;
+        }
         if (gWifiView == WifiView::Connecting) {
             return true;            /* res a fer mentre connecta */
         }
@@ -1901,20 +1954,7 @@ bool handleTap(int16_t x, int16_t y)
             return true;
         }
         if (y >= kApBtnY && y < kApBtnY + kApBtnH) {
-            if (Net::apMode()) {
-                Net::stopAccessPoint();
-                SpriteRenderer::resume();       /* ja hi ha memoria per a la mascota */
-                Serial.printf("[UI] xarxa propia aturada, heap %u kB\n",
-                              static_cast<unsigned>(ESP.getFreeHeap() / 1024));
-            } else {
-                /* La pila WiFi necessita ~50 kB: deixam anar els buffers grossos
-                 * de la mascota mentre dura la xarxa propia. */
-                SpriteRenderer::suspend();
-                Net::startAccessPoint("Tamagoxi", nullptr);
-                Serial.printf("[UI] xarxa propia: %s, heap %u kB\n",
-                              Net::apMode() ? "encesa a http://192.168.4.1/" : "no s'ha pogut obrir",
-                              static_cast<unsigned>(ESP.getFreeHeap() / 1024));
-            }
+            toggleAccessPoint();
             drawWifi();
             return true;
         }

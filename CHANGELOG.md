@@ -19,6 +19,12 @@ Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
   una eina de manteniment, no l'estat normal de la mascota.
 - La llista de xarxes passa de 7 a 6 files per fer-hi lloc.
 - Fins ara només es podia encendre amb la comanda de consola `ap`.
+- El botó per gestionar-la és també a la **capçalera del panell** (vora el de
+  Tancar), així que hi és **a totes les pantalles**: llista, contrasenya,
+  connectant i resultat. Verd amb el text «encesa» = xarxa pròpia activa.
+- En aturar-la, la placa es **reinicia** (com fa quan s'apaga el Bluetooth):
+  la pila WiFi deixa el heap amb forats i la mascota ja no hi cabria, així
+  que el drac torna tot seguit amb un reinici net.
 
 ## Compatibilitat amb el pack d'assets nou (tamagochi_sd-3)
 - El firmware ara entén **els dos formats de manifest de mascota**:

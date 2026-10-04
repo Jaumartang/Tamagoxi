@@ -157,6 +157,12 @@ bool connectWifi()
         return false;
     }
 
+    /* Si teniem el punt d'acces propi ences l'hem d'aturar: la radio nomes pot
+     * fer una cosa alhora i el mode STA el deixaria inservible. */
+    if (gApMode) {
+        Net::stopAccessPoint();
+    }
+
     gState = Net::State::Connecting;
     Serial.printf("[NET] connectant a \"%s\"...\n", ssid);
     WiFi.persistent(false);

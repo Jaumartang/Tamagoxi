@@ -293,7 +293,13 @@ bool resume()
     }
     gSuspended = false;
     gStatus.active = false;      /* forcem que begin() torni a reservar */
-    return begin();
+    if (begin()) {
+        return true;
+    }
+    /* No hi ha hagut prou memoria contigua: tornam a l'estat suspes perque el
+     * cridador ho pugui tornar a provar mes endavant. */
+    gSuspended = true;
+    return false;
 }
 
 bool suspended()
