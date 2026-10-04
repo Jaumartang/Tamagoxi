@@ -62,7 +62,10 @@ bool beep(uint16_t freqHz, uint16_t ms, uint8_t volume);
 /* Cambra de so: llista de cançons, estat i control del reproductor. */
 
 constexpr uint8_t kMaxTracks = 64;
-constexpr size_t  kNameMax   = 48;
+/* Els noms dels fitxers de la SD venen de la FAT (fins a 255 caracters). Amb 48
+ * n'hi havia prou per a "prova.wav", pero qualsevol canco amb titol llarg es
+ * tallava i despres no es podia tornar a obrir (es perdia l'extensio). */
+constexpr size_t  kNameMax   = 128;
 
 struct Track {
     char     name[kNameMax];

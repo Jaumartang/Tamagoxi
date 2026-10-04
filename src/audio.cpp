@@ -463,7 +463,7 @@ void playFile(uint8_t index)
         return;
     }
 
-    char path[64];
+    char path[Audio::kNameMax + 16];   /* que cap nom sencer quedi tallat */
     snprintf(path, sizeof(path), "/music/%s", gTracks[index].name);
     gFile = SD.open(path, FILE_READ);
     if (!gFile) {
@@ -702,6 +702,14 @@ void scan()
             const char* slash = strrchr(nm, '/');
             const char* base = (slash != nullptr) ? (slash + 1) : nm;
             if (base[0] != '.' && isPlayable(base)) {
+                if (strlen(base) >= kNameMax) {
+                    /* El nom no ens hi cap: desat tallat no es podria tornar a
+                     * obrir (es perdria l'extensio). Val mes avisar i saltar-lo. */
+                    Serial.printf("[AUDIO] nom massa llarg (%u caracters), el salto: %.24s...\n",
+                                  static_cast<unsigned>(strlen(base)), base);
+                    entry.close();
+                    continue;
+                }
                 strlcpy(gTracks[gTrackCount].name, base, kNameMax);
                 gTracks[gTrackCount].bytes = entry.size();
                 ++gTrackCount;
@@ -811,7 +819,7 @@ bool writeTestWav(const char* name, uint16_t seconds)
         return false;
     }
 
-    char path[64];
+    char path[Audio::kNameMax + 16];   /* que cap nom sencer quedi tallat */
     snprintf(path, sizeof(path), "/music/%s", name);
     File f = SD.open(path, FILE_WRITE);
     if (!f) {

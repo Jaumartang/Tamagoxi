@@ -2,6 +2,15 @@
 
 Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
 
+## Correcció important: cançons amb nom llarg (Música)
+- Els noms dels fitxers de `/music` es desaven en un buffer de 48 caràcters i, en
+  obrir-los, en un camí de 64. Qualsevol cançó amb títol llarg (per exemple
+  «Figa Flawas - LA MARINA STA MORENA (Videoclip Oficial).mp3») quedava tallada
+  pel mig, perdia l'extensió i **no es podia seleccionar** («no s'ha pogut obrir»).
+- Ara el nom hi cap sencer (128 caràcters) i el camí es calcula a partir d'ell.
+  Si algun nom encara fos massa llarg, es **salta i s'avisa** per la consola en
+  comptes de desar-lo tallat (així mai més falla en silenci).
+
 ## Correccions d'usabilitat dels panells
 - **Guardia de toc (450 ms)**: quan un toc obre o tanca un panell (o el
   desplegable de dalt), els tocs següents queden bloquejats un moment. Abans el
