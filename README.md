@@ -108,7 +108,7 @@ El HUD té un **botó de ratlles** (a la dreta) que obre un desplegable:
 | **WiFi** | Panell complet de xarxes (vegeu més avall) |
 | **Música** | Reproductor: cançó actual, transport, volum i llista |
 | **Bluetooth** | **Escaneja els aparells d'àudio** que hi ha a prop (amb el nom i el senyal), enllaça-hi amb un toc, i encén/apaga el Bluetooth o tria la sortida (placa/Bluetooth) |
-| **Jocs** | Properament: llista dels jocs que vindran |
+| **Jocs** | **5 jocs didàctics** per a la Noa: sumes, restes, lletres, paraules i escriure, amb **estrelles** de recompensa que es guarden |
 | **Ajustos** | Tema de colors, fons de la pantalla i quants fons té la targeta |
 | **Sobre** | Xip, memòria, temps encesa, necessitats, WiFi i meteo |
 

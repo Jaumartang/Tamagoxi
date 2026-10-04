@@ -2,6 +2,24 @@
 
 Tamagoxi v2 — el dragó de la Noa (ESP32 + pantalla ST7796S de 4" + tàctil).
 
+## Fase 10 — Jocs didàctics i recompenses
+- **5 jocs** per aprendre jugant, pensats per a una nena de 6 anys:
+  **Sumes**, **Restes** (1-17, es fan més difícils a mesura que juga),
+  **Lletres** (amb quina lletra comença aquest dibuix?), **Paraules**
+  (quin dibuix és?) i **Escriure** (quina lletra falta?).
+- **Sistema escalable**: tots comparteixen un motor de preguntes; afegir un joc
+  nou és escriure una funció que genera la pregunta i una línia a la taula
+  (`kGames`).
+- **Reforç positiu**: verd si encerta, vermell si no (sense penalitzar), soet de
+  celebració i cap pressa per respondre.
+- **Recompenses**: cada encert dona una **estrella** que es desa a la NVS i es
+  veu sempre a dalt; cada 10 estrelles surt una **pantalla de celebració** i el
+  drac menja content; cada joc guarda els encerts de la Noa.
+- **Visualment atractiu**: targetes grans de colors vius, text ben gros, dibuixos
+  fets amb primitives (sol, casa, peix, flor, lluna, estrella, poma, cor, núvol,
+  gat, arbre, pilota, barca) i només 3 opcions per pantalla.
+- Comandes: `joc [n]` (obre un joc), `jocs` (estat i encerts), `jocs reset`.
+
 ## Fase 9 — Missatges al mòbil
 - Enviar missatges des del Tamagoxi (Telegram), amb una **llista de números**
   seleccionats i avisos automàtics del drac (gana, malaltia, tristesa, canyera).

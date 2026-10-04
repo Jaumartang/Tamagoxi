@@ -11,6 +11,7 @@
 #include "led.h"
 #include "net.h"
 #include "notify.h"
+#include "games.h"
 #include "pet.h"
 #include "sd_assets.h"
 #include "storage.h"
@@ -976,32 +977,71 @@ bool btChanged()
     return false;
 }
 
+/* --- Menu de jocs (l'aparador) -------------------------------------------- */
+
+constexpr int kGTileY0 = 92;
+constexpr int kGTileH  = 84;
+constexpr int kGTileGap = 12;
+constexpr int kGameTileCols = 6;
+
 void drawGames()
 {
     TFT_eSPI& t = tft();
     t.fillRect(0, 0, SCREEN_W, SCREEN_H, Ui::colorPanelBg());
     drawTitleBar("Jocs");
 
+    char buf[52];
+    snprintf(buf, sizeof(buf), "Estrelles: %u    Nivell %u",
+             static_cast<unsigned>(Games::stars()), static_cast<unsigned>(Games::level() + 1));
     t.setTextDatum(MC_DATUM);
-    t.setTextFont(4);
-    t.setTextColor(kText, Ui::colorPanelBg());
-    t.drawString("Encara no hi ha jocs", SCREEN_W / 2, 120);
-
-    t.setTextFont(2);
-    t.setTextColor(kDimText, Ui::colorPanelBg());
-    t.drawString("Aviat en vindran:", SCREEN_W / 2, 180);
-
     t.setTextFont(2);
     t.setTextColor(kText, Ui::colorPanelBg());
-    t.drawString("· Memoria d'animals", SCREEN_W / 2, 220);
-    t.drawString("· Endevina el numero", SCREEN_W / 2, 252);
-    t.drawString("· El laberint del drac", SCREEN_W / 2, 284);
+    t.drawString(buf, SCREEN_W / 2, 66);
 
-    t.setTextFont(1);
-    t.setTextColor(kDimText, Ui::colorPanelBg());
-    t.drawString("Mentrestant, cuida el drago!", SCREEN_W / 2, 340);
+    /* Una targeta gran per joc (colors vius i el nom ben gros). */
+    static const uint16_t kTileCol[kGameTileCols] = {0xFE19, 0x07E0, 0xFD20, 0xFFE0, 0xF81F, 0x07FF};
+    for (uint8_t i = 0; i < Games::count() && i < kGameTileCols; ++i) {
+        const Games::Definition& g = Games::game(i);
+        const int col = (i < 4) ? (i % 2) : 0;
+        const int row = (i < 4) ? (i / 2) : 2;
+        const int x   = (col == 0) ? 12 : 164;
+        const int y   = kGTileY0 + row * (kGTileH + kGTileGap);
+        const uint16_t bg = kTileCol[i];
 
-    drawButton(8, 410, 304, 60, "Tanca", Ui::colorClose());
+        t.fillRoundRect(x, y, 144, kGTileH, 16, bg);
+        t.drawRoundRect(x, y, 144, kGTileH, 16, kText);
+
+        t.setTextDatum(MC_DATUM);
+        t.setTextFont(6);
+        t.setTextColor(0x4208, bg);            /* text fosc: els colors son vius */
+        t.drawString(g.symbol, x + 38, y + kGTileH / 2);
+        t.setTextFont(2);
+        t.drawString(g.name, x + 96, y + kGTileH / 2 + 2);
+
+        /* Encerts que porta la Noa en aquest joc. */
+        char n[10];
+        snprintf(n, sizeof(n), "%u*", static_cast<unsigned>(Games::rightOf(i)));
+        t.setTextFont(1);
+        t.setTextColor(0x4208, bg);
+        t.drawString(n, x + 122, y + 14);
+    }
+
+    /* La casella que queda buida: un premiet visual. */
+    if (Games::count() == 5) {
+        const int x = 164;
+        const int y = kGTileY0 + 2 * (kGTileH + kGTileGap);
+        t.fillRoundRect(x, y, 144, kGTileH, 16, Ui::colorTrack());
+        t.setTextDatum(MC_DATUM);
+        t.setTextFont(4);
+        t.setTextColor(0x4208, Ui::colorTrack());
+        char n[24];
+        snprintf(n, sizeof(n), "%u", static_cast<unsigned>(Games::stars()));
+        t.drawString(n, x + 72, y + 26);
+        t.setTextFont(1);
+        t.drawString("estrelles", x + 72, y + 56);
+    }
+
+    drawButton(8, 412, 304, 56, "Tanca", Ui::colorClose());
 }
 
 bool gListDrawn = false;
@@ -1537,6 +1577,8 @@ void setNotice(const char* title, const char* text)
 void showGames()
 {
     gId = Id::Games;
+    Games::close();             /* comencem sempre per l'aparador */
+    Serial.println(F("[UI] menu de jocs"));
     drawGames();
 }
 
@@ -1584,6 +1626,11 @@ void topMenuRect(int16_t& x, int16_t& y, int16_t& w, int16_t& h)
 
 void update(uint32_t nowMs)
 {
+    if (gId == Id::Games) {
+        Games::loop(nowMs);          /* el joc avança sol (pregunta nova, etc.) */
+        return;
+    }
+
     if (gId == Id::Bluetooth) {
         /* Refresca NOMES si ha canviat alguna cosa (si no, parpellejava). */
         const uint32_t period = Audio::btScanning() ? 600u : 2000u;
@@ -1931,6 +1978,31 @@ bool handleTap(int16_t x, int16_t y)
     /* --- Missatge del mobil: qualsevol toc el tanca --- */
     if (gId == Id::Message) {
         return false;
+    }
+
+    /* --- Jocs: l'aparador o el joc que hi ha obert --- */
+    if (gId == Id::Games) {
+        if (Games::isOpen()) {
+            if (!Games::handleTap(x, y)) {
+                Games::close();
+                drawGames();                 /* torna a l'aparador */
+            }
+            return true;
+        }
+        for (uint8_t i = 0; i < Games::count(); ++i) {
+            const int col = (i < 4) ? (i % 2) : 0;
+            const int row = (i < 4) ? (i / 2) : 2;
+            const int tx  = (col == 0) ? 12 : 164;
+            const int ty  = kGTileY0 + row * (kGTileH + kGTileGap);
+            if (x >= tx && x < tx + 144 && y >= ty && y < ty + kGTileH) {
+                Games::open(i);
+                return true;
+            }
+        }
+        if (y >= 412 && y < 468) {
+            return false;                    /* Tanca */
+        }
+        return true;
     }
 
     /* --- Sobre i Jocs: boto Tanca de baix --- */

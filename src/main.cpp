@@ -17,6 +17,7 @@
 #include "ui_panels.h"
 #include "webui.h"
 #include "notify.h"
+#include "games.h"
 
 /*
  * main.cpp - Tamagoxi v2 (Tamagotchi gegant per a la Noa)
@@ -1264,6 +1265,17 @@ void handleCommand(char* cmd)
         } else {
             Notify::send(arg);          /* 'msg <text>' envia el text */
         }
+    } else if (strcmp(cmd, "jocs") == 0) {
+        if (arg != nullptr && strcmp(arg, "reset") == 0) {
+            Games::resetProgress();
+        } else {
+            Games::printStatus();
+        }
+    } else if (strcmp(cmd, "joc") == 0) {
+        Panels::open(Panels::Id::Games);
+        if (arg != nullptr) {
+            Games::open(static_cast<uint8_t>(atoi(arg)));   /* joc 0..4 */
+        }
     } else if (strcmp(cmd, "webtest") == 0) {
         WebUI::requestSelfTest(false);
     } else if (strcmp(cmd, "webdump") == 0) {
@@ -1475,6 +1487,7 @@ void setup()
     Panels::Hooks hooks = {panelSetBackground, panelIsAutoBackground, panelBackgroundName};
     Panels::setHooks(hooks);
     Notify::begin();
+    Games::begin();
 
     updateLed();
     gHeapTimer = millis();
