@@ -3,6 +3,9 @@
 #include <Arduino.h>
 #include <TFT_eSPI.h>
 
+#include "bg_renderer.h"
+#include "sprite_renderer.h"
+
 #include "tg_config.h"
 #include "display.h"
 #include "sprite_renderer.h"
@@ -118,6 +121,35 @@ void iconHeart(int cx, int cy, int s, uint16_t col)
 }
 
 /* Una fila de barra (compacta): icona + barra rodona + valor numeric. */
+/* Barreja dos colors RGB565: 'pa' per cent del primer. */
+uint16_t blend565(uint16_t a, uint16_t b, uint8_t pa)
+{
+    const int pb = 100 - pa;
+    const int r  = ((a >> 11) & 0x1F) * pa + ((b >> 11) & 0x1F) * pb;
+    const int g  = ((a >> 5) & 0x3F) * pa + ((b >> 5) & 0x3F) * pb;
+    const int bl = (a & 0x1F) * pa + (b & 0x1F) * pb;
+    return static_cast<uint16_t>(((r / 100) << 11) | ((g / 100) << 5) | (bl / 100));
+}
+
+/* Es el punt (x,y) dins d'un rectangle arrodonit? (per barrejar-hi color). */
+bool insideRound(int x, int y, int rx, int ry, int rw, int rh, int r)
+{
+    if (rw <= 0 || rh <= 0 || x < rx || x >= rx + rw || y < ry || y >= ry + rh) {
+        return false;
+    }
+    int rr = r;
+    if (rr > rw / 2) { rr = rw / 2; }
+    if (rr > rh / 2) { rr = rh / 2; }
+    if (rr <= 0) {
+        return true;
+    }
+    const int cx = (x < rx + rr) ? (rx + rr) : ((x >= rx + rw - rr) ? (rx + rw - rr - 1) : x);
+    const int cy = (y < ry + rr) ? (ry + rr) : ((y >= ry + rh - rr) ? (ry + rh - rr - 1) : y);
+    const int dx = x - cx;
+    const int dy = y - cy;
+    return (dx * dx + dy * dy) <= (rr * rr);
+}
+
 void drawBarRow(int row, int kind, uint16_t col, uint8_t value)
 {
     const int y = UI_BARS_TOP + row * kBarRowH;
@@ -304,12 +336,120 @@ void drawBars(uint8_t hunger, uint8_t happiness, uint8_t energy, uint8_t health)
         return;  /* cap valor ha canviat */
     }
 
-    gfx().fillRect(0, UI_BARS_TOP, UI_BARS_PANEL_R, UI_BARS_BOT - UI_BARS_TOP, th().panelBg);
-    gfx().drawLine(0, UI_BARS_TOP, UI_BARS_PANEL_R - 1, UI_BARS_TOP, th().panelEdge);
-    drawBarRow(0, 0, kColHunger, hunger);
-    drawBarRow(1, 1, kColHappy, happiness);
-    drawBarRow(2, 2, kColEnergy, energy);
-    drawBarRow(3, 3, kColHealth, health);
+    /* Barres "de vidre": es llegeix el fons de la SD, s'hi barregen els colors
+     * (translucid) i s'envia la fila sencera ja composta. */
+    static const uint16_t kCols[4] = {kColHunger, kColHappy, kColEnergy, kColHealth};
+    const int areaH = UI_BARS_BOT - UI_BARS_TOP;     /* 84 px */
+    const int rowH  = areaH / 4;                     /* 21 px per barra */
+
+    const char* bgName = SpriteRenderer::backgroundName();
+    const bool glass = (bgName != nullptr && bgName[0] != '\0')
+                       && BgRenderer::beginStrip(bgName);
+
+    constexpr int kCardX = 2;
+    constexpr int kCardW = UI_BARS_PANEL_R - 4;
+    constexpr int kCardR = 9;
+    constexpr int kTx = 36;
+    constexpr int kTw = 152;
+    constexpr int kTh = 13;
+    constexpr int kTr = 6;
+
+    TFT_eSPI& t = gfx();
+    if (!glass) {
+        t.fillRect(0, UI_BARS_TOP, UI_BARS_PANEL_R, areaH, th().panelBg);
+    } else {
+        t.startWrite();
+        t.setAddrWindow(0, UI_BARS_TOP, UI_BARS_PANEL_R, areaH);
+    }
+
+    uint8_t src[UI_BARS_PANEL_R * 2];
+    uint8_t out[UI_BARS_PANEL_R * 2];
+
+    for (int i = 0; i < 4; ++i) {
+        const int top   = UI_BARS_TOP + i * rowH;
+        const int cy    = top + rowH / 2;
+        const uint8_t v = (vals[i] > 100) ? 100 : vals[i];
+        const uint16_t col = kCols[i];
+        const int cardY = top + 1;
+        const int cardH = rowH - 3;
+        const int ty    = cy - kTh / 2;
+        const int fillW = (kTw * v) / 100;
+
+        if (!glass) {
+            t.fillRoundRect(kCardX, cardY, kCardW, cardH, kCardR, th().panelBg);
+            t.fillRoundRect(kTx, ty, kTw, kTh, kTr, th().barTrack);
+            if (fillW > 4) {
+                t.fillRoundRect(kTx, ty, fillW, kTh, kTr, col);
+            }
+            continue;
+        }
+
+        for (int y = top; y < top + rowH; ++y) {
+            if (!BgRenderer::readStripRow(y, 0, UI_BARS_PANEL_R, src)) {
+                break;
+            }
+            for (int x = 0; x < UI_BARS_PANEL_R; ++x) {
+                const uint16_t b =
+                    static_cast<uint16_t>((src[x * 2] << 8) | src[x * 2 + 1]);
+                uint16_t c = b;
+                if (insideRound(x, y, kCardX, cardY, kCardW, cardH, kCardR)) {
+                    c = blend565(th().panelBg, c, 58);      /* vidre */
+                }
+                out[x * 2]     = static_cast<uint8_t>(c >> 8);
+                out[x * 2 + 1] = static_cast<uint8_t>(c & 0xFF);
+            }
+            t.pushPixels(reinterpret_cast<uint16_t*>(out), UI_BARS_PANEL_R);
+        }
+    }
+
+    if (glass) {
+        t.endWrite();
+        BgRenderer::endStrip();
+    }
+
+    /* La pista i l'omplert, opacs al damunt del vidre (aixi els colors son
+     * exactament els del tema i es veuen vius) + brillantor i icona/número. */
+    for (int i = 0; i < 4; ++i) {
+        const int cy    = UI_BARS_TOP + i * rowH + rowH / 2;
+        const uint8_t v = (vals[i] > 100) ? 100 : vals[i];
+        const uint16_t col = kCols[i];
+        const int ty    = cy - kTh / 2;
+        const int fillW = (kTw * v) / 100;
+
+        t.fillRoundRect(kTx, ty, kTw, kTh, kTr, th().barTrack);
+        if (fillW > 6) {
+            t.fillRoundRect(kTx, ty, fillW, kTh, kTr, col);
+            /* Brillantor de dalt i ombra de baix: sembla un tub de vidre. */
+            const uint16_t lite = blend565(col, 0xFFFF, 55);
+            const uint16_t dark = blend565(col, 0x0000, 35);
+            if (fillW > 14) {
+                t.fillRoundRect(kTx + 3, ty + 2, fillW - 6, 3, 2, lite);
+                t.fillRoundRect(kTx + 3, ty + kTh - 4, fillW - 6, 2, 1, dark);
+            }
+        }
+    }
+
+    /* Icones i numeros al damunt (opacs: es llegeixen millor). */
+    const uint16_t cardCol = blend565(th().panelBg, 0x18E3, 58);
+    for (int i = 0; i < 4; ++i) {
+        const int cy = UI_BARS_TOP + i * rowH + rowH / 2;
+        const uint8_t v = (vals[i] > 100) ? 100 : vals[i];
+        const uint16_t col = kCols[i];
+        switch (i) {
+            case 0: iconApple(16, cy, 11, col, cardCol); break;
+            case 1: iconSmiley(16, cy, 6, col); break;
+            case 2: iconBattery(16, cy, 11, col, v); break;
+            default: iconHeart(16, cy, 12, col); break;
+        }
+        char buf[8];
+        snprintf(buf, sizeof(buf), "%u", static_cast<unsigned>(v));
+        t.setTextDatum(MR_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(0x0000, cardCol);
+        t.drawString(buf, UI_BARS_PANEL_R - 5, cy + 1);     /* ombra del numero */
+        t.setTextColor(col, cardCol);
+        t.drawString(buf, UI_BARS_PANEL_R - 6, cy);
+    }
 
     for (int i = 0; i < 4; ++i) {
         gLastBars[i] = vals[i];

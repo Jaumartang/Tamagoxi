@@ -148,7 +148,7 @@ static constexpr int UI_HUD_H   = 28;
 /* Franja inferior compacta (44 px): barres compactes (esquerra) + boto MENU
  * (dreta). El menu d'accions es desplega DINS la mateixa franja.
  * HUD + franja = 72 px = 15% de 480. */
-static constexpr int UI_BARS_TOP     = 436;
+static constexpr int UI_BARS_TOP     = 396;
 static constexpr int UI_BARS_BOT     = 480;
 static constexpr int UI_BARS_PANEL_R = 232;   /* limit de barres/botons d'accio */
 

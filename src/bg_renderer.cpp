@@ -251,4 +251,54 @@ const Status& status()
     return gStatus;
 }
 
+/* --- Lectura per franges (per fer barreges translucides) ------------------ */
+
+namespace {
+File     gStrip;                 /* fitxer obert mentre es llegeix per franges */
+uint16_t gStripW = 0;
+uint16_t gStripH = 0;
+}  // namespace
+
+bool beginStrip(const char* name)
+{
+    endStrip();
+    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+    gStripW = bgs.width;
+    gStripH = bgs.height;
+    if (name == nullptr || name[0] == '\0' || gStripW == 0 || gStripH == 0) {
+        return false;
+    }
+    char path[kPathLen];
+    snprintf(path, sizeof(path), "/backgrounds/%s.bin", name);
+    gStrip = SD.open(path, FILE_READ);
+    if (!gStrip) {
+        Serial.printf("[BG] franges: no s'ha pogut obrir %s\n", path);
+        return false;
+    }
+    return true;
+}
+
+bool readStripRow(int y, int x, int w, uint8_t* out)
+{
+    if (!gStrip || y < 0 || x < 0 || w <= 0) {
+        return false;
+    }
+    if (x + w > static_cast<int>(gStripW) || y >= static_cast<int>(gStripH)) {
+        return false;
+    }
+    const uint32_t off = (static_cast<uint32_t>(y) * gStripW + static_cast<uint32_t>(x)) * 2u;
+    if (!gStrip.seek(off)) {
+        return false;
+    }
+    const size_t bytes = static_cast<size_t>(w) * 2u;
+    return gStrip.read(out, bytes) == bytes;
+}
+
+void endStrip()
+{
+    if (gStrip) {
+        gStrip.close();
+    }
+}
+
 }  // namespace BgRenderer
