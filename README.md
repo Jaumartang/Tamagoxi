@@ -5,8 +5,15 @@ Mascota virtual (un **dragó**) en una placa ESP32 amb pantalla de 4" (LCDWiki
 en una targeta **microSD**; el firmware els carrega, els anima i hi afegeix la
 lògica del joc.
 
-> Estat actual: **Fase 7** — música de la SD (MP3/WAV) pel DAC de la placa **i pels
-> auriculars Bluetooth** (emissor A2DP), sobre la Fase 6.5 (WiFi/metèo + menús i panells).
+> Estat actual: **Fases 1–9 fetes** — mascota animada, memòria de joc (NVS), tàctil i
+> calibratge, HUD i barres, fons de la SD, menús i panells, **música** (MP3/WAV de la SD
+> pel DAC de la placa i pels **auriculars Bluetooth**, amb escaneig i enllaçament de
+> dispositius), **servidor web** per pujar fitxers a la SD des del navegador i
+> **missatges al mòbil** (enviar, rebre i notificacions a la pantalla).
+
+| La mascota | El menú de dalt | Missatges |
+|---|---|---|
+| ![El drac](docs/screenshots/pantalla.png) | ![Menú](docs/screenshots/menu.png) | ![Missatges](docs/screenshots/missatges.png) |
 
 ## So i música (Fase 7) — `src/audio.*`
 
