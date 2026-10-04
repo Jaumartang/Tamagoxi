@@ -6,6 +6,7 @@
 #include "tg_config.h"
 #include "display.h"
 #include "led.h"
+#include "link.h"
 #include "net.h"
 #include "pet.h"
 #include "pins.h"
@@ -1123,6 +1124,14 @@ void handleCommand(char* cmd)
         cmdShot(arg);
     } else if (strcmp(cmd, "baud") == 0) {
         cmdBaud(arg);
+    } else if (strcmp(cmd, "link") == 0) {
+        if (arg == nullptr) {
+            Link::printStatus();
+        } else {
+            /* Envia un text al xip amic: serveix per provar l'anada i tornada. */
+            Link::send("LOG", arg);
+            Serial.printf("[LINK] enviat: %s\n", arg);
+        }
     } else if (strcmp(cmd, "theme") == 0) {
         if (arg == nullptr) {
             for (uint8_t i = 0; i < Ui::themeCount(); ++i) {
@@ -1511,6 +1520,7 @@ void setup()
     Panels::setHooks(hooks);
     Notify::begin();
     Games::begin();
+    Link::begin();
 
     updateLed();
     gHeapTimer = millis();
@@ -1521,6 +1531,7 @@ void setup()
 void loop()
 {
     pollSerial();
+    Link::update();       /* parla amb el xip amic (ping + respostes) */
 
     /* Missatge del mobil: si n'ha arribat algun, s'obre la finestreta. */
     if (gScreen == Screen::Home && !Panels::isOpen() && Notify::takeNew()) {
