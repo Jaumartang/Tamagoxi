@@ -1124,6 +1124,25 @@ void handleCommand(char* cmd)
         cmdShot(arg);
     } else if (strcmp(cmd, "baud") == 0) {
         cmdBaud(arg);
+    } else if (strcmp(cmd, "friendota") == 0) {
+        /* Envia un firmware de la SD al xip amic per l'enllac (OTA). */
+        const char* file = (arg != nullptr) ? arg : "/firmware/friend.bin";
+        Serial.printf("[OTA] firmware per al xip amic: %s\n", file);
+        Serial.flush();
+        const bool ok = Link::sendFirmware(file);
+        Serial.printf("[OTA] %s %s\n", ok ? "acabat be" : "ha fallat:", Link::lastError());
+    } else if (strcmp(cmd, "petpause") == 0) {
+        /* Deixa anar els buffers de la mascota: el web i la meteo (TLS) necessiten
+         * uns 40 kB dels que la mascota te reservats. */
+        SpriteRenderer::suspend();
+        startHome();
+        Serial.printf("[UI] mascota en pausa, heap %u kB lliures\n",
+                      static_cast<unsigned>(ESP.getFreeHeap() / 1024));
+    } else if (strcmp(cmd, "petresume") == 0) {
+        const bool ok = SpriteRenderer::resume();
+        startHome();
+        Serial.printf("[UI] mascota %s, heap %u kB lliures\n", ok ? "de tornada" : "sense memoria",
+                      static_cast<unsigned>(ESP.getFreeHeap() / 1024));
     } else if (strcmp(cmd, "link") == 0) {
         if (arg == nullptr) {
             Link::printStatus();

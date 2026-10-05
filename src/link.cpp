@@ -1,13 +1,14 @@
 #include "link.h"
 
 #include <Arduino.h>
+#include <SD.h>
 
 #include "tg_config.h"
 #include "tg_link.h"
 
 namespace {
 
-constexpr size_t kLineMax = 240;
+constexpr size_t kLineMax = 1200;   /* tambe hi passen els trossos de firmware */
 
 char     gLine[kLineMax];
 size_t   gLen = 0;
@@ -54,6 +55,48 @@ void handleLine(char* line)
     }
 }
 
+/* Espera una resposta d'aquesta comanda (per l'OTA, que va sincronitzada). */
+bool waitFor(const char* want, uint32_t ms)
+{
+    const uint32_t deadline = millis() + ms;
+    while (static_cast<int32_t>(deadline - millis()) > 0) {
+        while (Serial.available() > 0) {
+            const int ch = Serial.read();
+            if (ch < 0) {
+                break;
+            }
+            if (ch == '\n' || ch == '\r') {
+                if (gLen > 0) {
+                    gLine[gLen] = '\0';
+                    uint8_t seq = 0;
+                    char    c[24];
+                    static char a[TgLink::kMaxArg];
+                    const bool ok = TgLink::parseFrame(gLine, &seq, c, sizeof(c), a, sizeof(a));
+                    gLen = 0;
+                    if (ok) {
+                        gLastSeen = millis();
+                        ++gRecv;
+                        if (strcmp(c, want) == 0) {
+                            return true;
+                        }
+                    } else {
+                        ++gBad;
+                    }
+                }
+                continue;
+            }
+            if (gLen + 1 < kLineMax) {
+                gLine[gLen++] = static_cast<char>(ch);
+            } else {
+                gLen = 0;
+                ++gBad;
+            }
+        }
+        delay(2);
+    }
+    return false;
+}
+
 }  // namespace
 
 namespace Link {
@@ -95,6 +138,65 @@ bool send(const char* cmd, const char* arg)
     }
     noteError("no s'ha pogut escriure a l'enllac");
     return false;
+}
+
+bool sendFirmware(const char* path)
+{
+    if (!gActive) {
+        begin();                  /* l'enllac ocupa l'UART0 d'aquesta placa */
+    }
+    File f = SD.open(path, FILE_READ);
+    if (!f) {
+        noteError("no s'ha pogut obrir el fitxer del firmware");
+        return false;
+    }
+    const size_t size = f.size();
+    Serial.printf("[OTA] enviant %s (%u kB) al xip amic...\n", path,
+                  static_cast<unsigned>(size / 1024));
+    Serial.flush();
+
+    char arg[24];
+    snprintf(arg, sizeof(arg), "%u", static_cast<unsigned>(size));
+    send("OTA", arg);
+    if (!waitFor("OTAOK", 5000)) {
+        f.close();
+        noteError("el xip amic no ha acceptat l'OTA");
+        return false;
+    }
+
+    static uint8_t chunk[500];
+    static char    hex[1004];
+    size_t sent = 0;
+    while (sent < size) {
+        const size_t n = f.read(chunk, sizeof(chunk));
+        if (n == 0) {
+            break;
+        }
+        for (size_t i = 0; i < n; ++i) {
+            snprintf(hex + i * 2, 3, "%02X", chunk[i]);
+        }
+        bool ok = false;
+        for (int attempt = 0; attempt < 4 && !ok; ++attempt) {
+            send("OTAD", hex);
+            ok = waitFor("OTAOK", 2500);
+        }
+        if (!ok) {
+            f.close();
+            noteError("l'enllac s'ha tallat a mig enviament");
+            return false;
+        }
+        sent += n;
+        if ((sent % 40960) < n) {         /* cada 40 kB, per no omplir el log */
+            Serial.printf("[OTA] %u/%u kB\n", static_cast<unsigned>(sent / 1024),
+                          static_cast<unsigned>(size / 1024));
+        }
+    }
+    f.close();
+
+    send("OTAE", "fi");
+    const bool done = waitFor("OTAOK", 8000);
+    noteError(done ? "" : "sense confirmacio final de l'OTA");
+    return done;
 }
 
 void update()

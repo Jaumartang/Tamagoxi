@@ -25,7 +25,7 @@
 namespace TgLink {
 
 constexpr uint32_t kBaud   = 921600;   /* bauds de l'enllac */
-constexpr size_t   kMaxArg = 160;      /* mida maxima dels arguments */
+constexpr size_t   kMaxArg = 1100;     /* mida maxima dels arguments (els trossos de firmware hi passen) */
 
 /* Suma (mod 256) dels caracters: el checksum del marc. */
 inline uint8_t checksum(const char* s, size_t n)

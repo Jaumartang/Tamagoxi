@@ -16,13 +16,14 @@
  */
 
 #include <Arduino.h>
+#include <Update.h>
 
 #include "tg_link.h"
 
 constexpr int    kTxPin   = 1;        /* connector UART de la placa: IO1 (TX) */
 constexpr int    kRxPin   = 3;        /* i IO3 (RX) */
 constexpr int    kLedPin  = 2;        /* LED blau de la placa */
-constexpr size_t kLineMax = 240;
+constexpr size_t kLineMax = 1200;   /* tambe hi passen els trossos de firmware */
 constexpr uint32_t kConsoleMs = 2500; /* estona de consola abans de passar a l'enllac */
 
 char     gLine[kLineMax];
@@ -49,6 +50,15 @@ void reply(const char* cmd, const char* arg)
     ++gSent;
 }
 
+/* Valor d'un digit hexadecimal (-1 si no ho es). */
+int hexVal(char c)
+{
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
 /* Tracta una linia sencera vinguda de la pantalla. */
 void handleLine(char* line)
 {
@@ -61,7 +71,41 @@ void handleLine(char* line)
     }
     ++gRecv;
 
-    if (strcmp(cmd, "PING") == 0) {
+    if (strcmp(cmd, "OTA") == 0) {
+        /* La pantalla ens vol enviar un firmware nou: hi reservam el lloc. */
+        const size_t size = strtoul(arg, nullptr, 10);
+        const bool ok = (size > 1000) && Update.begin(size, U_FLASH);
+        Serial.printf("[AMI] OTA de %u bytes -> %s\n", static_cast<unsigned>(size),
+                      ok ? "llest" : Update.errorString());
+        reply("OTAOK", ok ? "llest" : "error");
+    } else if (strcmp(cmd, "OTAD") == 0) {
+        static uint8_t buf[600];
+        const size_t alen = strlen(arg);
+        size_t w = 0;
+        for (size_t i = 0; i + 1 < alen && w < sizeof(buf); i += 2) {
+            const int hi = hexVal(arg[i]);
+            const int lo = hexVal(arg[i + 1]);
+            if (hi < 0 || lo < 0) {
+                break;
+            }
+            buf[w++] = static_cast<uint8_t>((hi << 4) | lo);
+        }
+        const size_t written = Update.write(buf, w);
+        if (written != w) {
+            Serial.printf("[AMI] OTA error escrivint: %s\n", Update.errorString());
+            reply("OTAOK", "error");
+        } else {
+            reply("OTAOK", "ok");
+        }
+    } else if (strcmp(cmd, "OTAE") == 0) {
+        const bool ok = Update.end(true);
+        Serial.printf("[AMI] OTA %s\n", ok ? "completada: reiniciant!" : Update.errorString());
+        reply("OTAOK", ok ? "fet" : "error");
+        delay(600);
+        if (ok) {
+            ESP.restart();
+        }
+    } else if (strcmp(cmd, "PING") == 0) {
         char up[40];
         snprintf(up, sizeof(up), "amic viu %lu s", static_cast<unsigned long>(millis() / 1000));
         reply("PONG", up);

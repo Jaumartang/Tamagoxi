@@ -29,6 +29,10 @@ const char* lastMessage();      /* ultim LOG que ens ha enviat */
 
 bool send(const char* cmd, const char* arg = nullptr);
 
+/* Envia un fitxer de la SD al xip amic com a firmware nou (OTA per l'enllac).
+ * Bloqueja fins que s'acaba (o falla) i va dient el progres per la consola. */
+bool sendFirmware(const char* path);
+
 void printStatus();             /* resum per la consola */
 uint32_t sentCount();
 uint32_t recvCount();
