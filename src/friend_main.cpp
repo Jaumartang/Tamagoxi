@@ -157,6 +157,9 @@ void setup()
     digitalWrite(kLedPin, HIGH);        /* el LED de la placa sol ser actiu baix */
 
     /* L'enllac va per la UART2 (IO16/IO17): la consola USB queda lliure ✓ */
+    /* Buffer de recepcio gran: els trossos de firmware son de ~1000 caracters i,
+     * mentre escrivim a la memoria, la UART ha de poder-los anar guardant. */
+    Serial2.setRxBufferSize(4096);
     Serial2.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
     Serial.printf("[AMI] enllac obert a %u bauds (TX %d, RX %d)\n",
                   static_cast<unsigned>(TgLink::kBaud), kTxPin, kRxPin);

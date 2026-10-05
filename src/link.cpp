@@ -158,10 +158,11 @@ bool sendFirmware(const char* path)
     char arg[24];
     snprintf(arg, sizeof(arg), "%u", static_cast<unsigned>(size));
     send("OTA", arg);
-    if (!waitFor("OTAOK", 5000)) {
-        f.close();
-        noteError("el xip amic no ha acceptat l'OTA");
-        return false;
+    if (!waitFor("OTAOK", 1500)) {
+        /* Potser no ens arriba la confirmacio inicial (el xip USB de la pantalla
+         * pot ocupar la linia de tornada): endavant igualment, i ja ho
+         * verificara la particio del xip amic abans d'arrencar res. */
+        Serial.println(F("[OTA] sense confirmacio inicial: envio igualment"));
     }
 
     static uint8_t chunk[500];
