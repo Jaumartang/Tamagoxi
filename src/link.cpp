@@ -167,6 +167,8 @@ bool sendFirmware(const char* path)
     static uint8_t chunk[500];
     static char    hex[1004];
     size_t sent = 0;
+    bool   blind = false;              /* si no hi ha confirmacions, a cegues */
+    int    ackFails = 0;
     while (sent < size) {
         const size_t n = f.read(chunk, sizeof(chunk));
         if (n == 0) {
@@ -178,7 +180,24 @@ bool sendFirmware(const char* path)
         bool ok = false;
         for (int attempt = 0; attempt < 4 && !ok; ++attempt) {
             send("OTAD", hex);
-            ok = waitFor("OTAOK", 2500);
+            if (blind) {
+                /* Mode a cegues: si no rebem confirmacions (per exemple perque
+                 * el xip USB de la pantalla ocupa la linia de tornada), anam
+                 * enviant amb una pausa i ho verificara la particio de l'amic. */
+                delay(45);
+                ok = true;
+            } else {
+                ok = waitFor("OTAOK", 700);
+                if (!ok) {
+                    ++ackFails;
+                    if (ackFails >= 2) {
+                        blind = true;
+                        Serial.println(F("[OTA] sense confirmacions: segueixo a cegues"));
+                    }
+                } else {
+                    ackFails = 0;
+                }
+            }
         }
         if (!ok) {
             f.close();

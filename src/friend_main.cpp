@@ -37,7 +37,8 @@ bool     gLedOn = false;
 size_t   gOtaTotal = 0;
 size_t   gOtaDone = 0;
 
-/* Envia una resposta a la placa de la pantalla. */
+/* Enviem i tot seguit deixam el pin de TX en alta impedancia: aixi no ens
+ * barallem amb el xip USB de la pantalla (que comparteix la mateixa linia). */
 void reply(const char* cmd, const char* arg)
 {
     char frame[280];
@@ -46,8 +47,10 @@ void reply(const char* cmd, const char* arg)
     if (n <= 0) {
         return;
     }
+    pinMode(kTxPin, OUTPUT);
     Serial2.write(reinterpret_cast<const uint8_t*>(frame), static_cast<size_t>(n));
     Serial2.flush();
+    pinMode(kTxPin, INPUT);          /* alla! (l'altra placa te pull-up a la linia) */
     ++gSent;
     /* Ho diem tambe pel USB (aixo no va per l'enllac): aixi es veu la conversa. */
     if (strcmp(cmd, "OTAD") != 0) {
