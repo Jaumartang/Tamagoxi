@@ -147,13 +147,19 @@ bool sendFirmware(const char* path)
     }
     File f = SD.open(path, FILE_READ);
     if (!f) {
-        noteError("no s'ha pogut obrir el fitxer del firmware");
+        char msg[96];
+        snprintf(msg, sizeof(msg), "ERROR: no puc obrir %s", path);
+        noteError(msg);
+        send("LOG", msg);              /* que ho vegi l'amic (i jo pel seu log) */
         return false;
     }
     const size_t size = f.size();
-    Serial.printf("[OTA] enviant %s (%u kB) al xip amic...\n", path,
-                  static_cast<unsigned>(size / 1024));
-    Serial.flush();
+    {
+        char msg[96];
+        snprintf(msg, sizeof(msg), "OTA: %s (%u kB)", path,
+                 static_cast<unsigned>(size / 1024));
+        send("LOG", msg);
+    }
 
     char arg[24];
     snprintf(arg, sizeof(arg), "%u", static_cast<unsigned>(size));
@@ -182,10 +188,11 @@ bool sendFirmware(const char* path)
         for (int attempt = 0; attempt < 4 && !ok; ++attempt) {
             send("OTAD", hex);
             if (blind) {
-                /* Mode a cegues: si no rebem confirmacions (per exemple perque
-                 * el xip USB de la pantalla ocupa la linia de tornada), anam
-                 * enviant amb una pausa i ho verificara la particio de l'amic. */
-                delay(45);
+                /* Mode a cegues: sense confirmacions, hem d'anar a poc a poc.
+                 * El xip amic triga ~100 ms a esborrar i escriure cada tros de
+                 * flash: si enviassim mes de pressa, el seu buffer es desbordaria
+                 * i es perdrien dades (ens hi vam quedar al 89%). */
+                delay(180);
                 ok = true;
             } else {
                 ok = waitFor("OTAOK", 700);
@@ -207,14 +214,18 @@ bool sendFirmware(const char* path)
         }
         sent += n;
         if ((sent % 40960) < n) {         /* cada 40 kB, per no omplir el log */
-            Serial.printf("[OTA] %u/%u kB\n", static_cast<unsigned>(sent / 1024),
-                          static_cast<unsigned>(size / 1024));
+            char msg[64];
+            snprintf(msg, sizeof(msg), "OTA %u/%u kB", static_cast<unsigned>(sent / 1024),
+                     static_cast<unsigned>(size / 1024));
+            send("LOG", msg);
         }
     }
     f.close();
 
     send("OTAE", "fi");
     const bool done = waitFor("OTAOK", 8000);
+    send("LOG", done ? "OTA enviada! l'amic la verifica i es reinicia"
+                     : "OTA: enviada (sense confirmacio final)");
     noteError(done ? "" : "sense confirmacio final de l'OTA");
     return done;
 }
