@@ -109,9 +109,9 @@ void begin()
     gWasOnline = false;
     /* L'enllac va per UART0, els MATEIXOS pins del monitor serie: a partir
      * d'aqui la consola d'aquesta placa queda muda fins que es reiniciï. */
-  Serial.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
+    Serial.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
     gActive = true;
-    Serial.printf("#0|HELLO|pantalla a 921600*00\n");
+    send("HELLO", "pantalla a 921600");
     Serial.flush();
 }
 
@@ -233,14 +233,28 @@ void update()
         send("PING", nullptr);
     }
 
+    /* Cada 5 s enviem les nostres estadistiques: aixi, mirant el log de l'amic,
+     * es veu si realment ens arriben les seves respostes. */
+    static uint32_t lastStat = 0;
+    if (now - lastStat >= 5000) {
+        lastStat = now;
+        char st[64];
+        snprintf(st, sizeof(st), "rebuts=%u enviats=%u dolents=%u viu=%d",
+                 static_cast<unsigned>(gRecv), static_cast<unsigned>(gSent),
+                 static_cast<unsigned>(gBad), online() ? 1 : 0);
+        send("STAT", st);
+    }
+
     /* Avisam nomes quan l'enllac apareix o desapareix (per no omplir el log). */
     const bool nowOnline = (gLastSeen != 0) && ((millis() - gLastSeen) < 3000);
     if (nowOnline != gWasOnline) {
         gWasOnline = nowOnline;
         if (nowOnline) {
-            Serial.printf("#0|LOG|enllac viu: %s*00\n", gLastMsg);
+            char txt[96];
+            snprintf(txt, sizeof(txt), "enllac viu! l'amic diu: %s", gLastMsg);
+            send("LOG", txt);
         } else {
-            Serial.println(F("#0|LOG|s'ha perdut l'enllac*00"));
+            send("LOG", "s'ha perdut l'enllac amb el xip amic");
         }
         Serial.flush();
     }

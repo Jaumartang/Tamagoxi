@@ -20,11 +20,10 @@
 
 #include "tg_link.h"
 
-constexpr int    kTxPin   = 1;        /* connector UART de la placa: IO1 (TX) */
-constexpr int    kRxPin   = 3;        /* i IO3 (RX) */
+constexpr int    kTxPin   = 17;       /* connector lliure de la placa: IO17 (TX) */
+constexpr int    kRxPin   = 16;       /* i IO16 (RX) -> la consola USB queda lliure ✓ */
 constexpr int    kLedPin  = 2;        /* LED blau de la placa */
 constexpr size_t kLineMax = 1200;   /* tambe hi passen els trossos de firmware */
-constexpr uint32_t kConsoleMs = 2500; /* estona de consola abans de passar a l'enllac */
 
 char     gLine[kLineMax];
 size_t   gLen = 0;
@@ -35,6 +34,8 @@ uint32_t gBad = 0;
 uint32_t gLastBlink = 0;
 uint32_t gLastHello = 0;
 bool     gLedOn = false;
+size_t   gOtaTotal = 0;
+size_t   gOtaDone = 0;
 
 /* Envia una resposta a la placa de la pantalla. */
 void reply(const char* cmd, const char* arg)
@@ -48,6 +49,10 @@ void reply(const char* cmd, const char* arg)
     Serial2.write(reinterpret_cast<const uint8_t*>(frame), static_cast<size_t>(n));
     Serial2.flush();
     ++gSent;
+    /* Ho diem tambe pel USB (aixo no va per l'enllac): aixi es veu la conversa. */
+    if (strcmp(cmd, "OTAD") != 0) {
+        Serial.printf("[AMI] -> %s %s\n", cmd, (arg != nullptr) ? arg : "");
+    }
 }
 
 /* Valor d'un digit hexadecimal (-1 si no ho es). */
@@ -70,11 +75,16 @@ void handleLine(char* line)
         return;                       /* soroll o linia malmesa: la ignorem */
     }
     ++gRecv;
+    if (strcmp(cmd, "OTAD") != 0) {
+        Serial.printf("[AMI] <- %s %s\n", cmd, arg);
+    }
 
     if (strcmp(cmd, "OTA") == 0) {
         /* La pantalla ens vol enviar un firmware nou: hi reservam el lloc. */
         const size_t size = strtoul(arg, nullptr, 10);
         const bool ok = (size > 1000) && Update.begin(size, U_FLASH);
+        gOtaTotal = size;
+        gOtaDone  = 0;
         Serial.printf("[AMI] OTA de %u bytes -> %s\n", static_cast<unsigned>(size),
                       ok ? "llest" : Update.errorString());
         reply("OTAOK", ok ? "llest" : "error");
@@ -91,6 +101,13 @@ void handleLine(char* line)
             buf[w++] = static_cast<uint8_t>((hi << 4) | lo);
         }
         const size_t written = Update.write(buf, w);
+        gOtaDone += w;
+        if (gOtaTotal > 0 && (gOtaDone % 32768) < w) {
+            Serial.printf("[AMI] OTA: %u/%u kB (%u%%)\n",
+                          static_cast<unsigned>(gOtaDone / 1024),
+                          static_cast<unsigned>(gOtaTotal / 1024),
+                          static_cast<unsigned>((gOtaDone * 100) / gOtaTotal));
+        }
         if (written != w) {
             Serial.printf("[AMI] OTA error escrivint: %s\n", Update.errorString());
             reply("OTAOK", "error");
@@ -130,27 +147,24 @@ void setup()
     delay(200);
     Serial.println();
     Serial.println(F("=== Xip amic del Tamagoxi ==="));
-    Serial.println(F("Enllac: TX IO1 -> RX de la pantalla, RX IO3 <- TX de la pantalla"));
+    Serial.println(F("Enllac: IO17 (TX) -> RX de la pantalla, IO16 (RX) <- TX de la pantalla"));
     Serial.println(F("Nomes 3 fils: TX, RX i GND (no connectis el 5V)"));
 
     pinMode(kLedPin, OUTPUT);
     digitalWrite(kLedPin, HIGH);        /* el LED de la placa sol ser actiu baix */
 
-    /* Els primers segons, consola normal; despres passam l'UART0 a l'enllac
-     * (son els mateixos pins del USB, no poden conviure). */
-    Serial.printf("[AMI] passant a l'enllac en %u ms\n", static_cast<unsigned>(kConsoleMs));
-    Serial.flush();
-    delay(kConsoleMs);
-
-    Serial.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
+    /* L'enllac va per la UART2 (IO16/IO17): la consola USB queda lliure ✓ */
+    Serial2.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
+    Serial.printf("[AMI] enllac obert a %u bauds (TX %d, RX %d)\n",
+                  static_cast<unsigned>(TgLink::kBaud), kTxPin, kRxPin);
     reply("HELLO", "amic a punt");
     gLastHello = millis();
 }
 
 void loop()
 {
-    while (Serial.available() > 0) {
-        const int ch = Serial.read();
+    while (Serial2.available() > 0) {
+        const int ch = Serial2.read();
         if (ch < 0) {
             break;
         }
