@@ -1554,6 +1554,34 @@ void setup()
     gHeapTimer = millis();
     printInfo();
     printHelp();
+
+    /* Enllac amb el xip amic: si en 4 segons no ens arriba cap ordre de consola,
+     * l'engegam tot sol. Aixi tambe funciona amb la placa alimentada per bateria
+     * (sense USB, on no hi ha consola). Si veiem un caracter que NO sigui d'un
+     * marc de l'enllac ('#'), ens hi quedam per poder-hi carregar firmware. */
+    {
+        const uint32_t t0 = millis();
+        bool consoleWanted = false;
+        while (millis() - t0 < 4000) {
+            while (Serial.available() > 0) {
+                const int ch = Serial.read();
+                if (ch >= 0 && ch != '#' && ch != '\r' && ch != '\n') {
+                    consoleWanted = true;
+                }
+            }
+            if (consoleWanted) {
+                break;
+            }
+            delay(10);
+        }
+        if (consoleWanted) {
+            Serial.println(F("[LINK] hi ha consola: l'enllac queda aturat (comanda 'link on')"));
+        } else {
+            Serial.println(F("[LINK] engego l'enllac amb el xip amic (la consola queda muda)"));
+            Serial.flush();
+            Link::begin();
+        }
+    }
 }
 
 void loop()
