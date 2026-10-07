@@ -111,16 +111,20 @@ void patrol(int& x, int& y, bool& flip)
     flip = false;
 
     if (p < 1200) {                                     /* pausa al centre */
+        flip = false;                                   /* mira cap a la dreta */
     } else if (p < 2400) {                              /* cap a la dreta */
         dx = (kHopX * static_cast<int>(p - 1200)) / 1200;
         mStart = 1200;
         mLen = 1200;
+        flip = false;                                   /* mira a la dreta ✓ */
     } else if (p < 3200) {                              /* pausa a la dreta */
         dx = kHopX;
+        flip = true;                                    /* ja mira cap a l'esquerra ✓ */
     } else if (p < 4400) {                              /* tornada al centre */
         dx = kHopX - (kHopX * static_cast<int>(p - 3200)) / 1200;
         mStart = 3200;
         mLen = 1200;
+        flip = true;                                    /* MIRALL ✓ */
     } else if (p < 5400) {                              /* cap a l'esquerra */
         dx = -(kHopX * static_cast<int>(p - 4400)) / 1000;
         mStart = 4400;
@@ -128,12 +132,12 @@ void patrol(int& x, int& y, bool& flip)
         flip = true;                                    /* MIRALL ✓ */
     } else if (p < 6200) {                              /* pausa a l'esquerra */
         dx = -kHopX;
-        flip = true;
+        flip = false;                                   /* ja mira cap a la dreta ✓ */
     } else {                                            /* tornada al centre */
         dx = -kHopX + (kHopX * static_cast<int>(p - 6200)) / 400;
         mStart = 6200;
         mLen = 400;
-        flip = true;
+        flip = false;                                   /* mira a la dreta ✓ */
     }
 
     x = kHomeX + dx;
@@ -172,10 +176,32 @@ void drawFrameOnly(bool withCounter)
         return;
     }
 
-    /* Omplim la zona amb el fons pla (aixo esborra la posicio vella ✓) */
+    /* Omplim la zona: a ANIMACIONS amb el fons pla, i a FONS amb el fons de
+     * veritat (llegit de la SD), perque el drago hi quedi integrat ✓ */
     const int zn = zw * zh;
-    for (int i = 0; i < zn; ++i) {
-        gDrawBuf[i] = kPanel;
+    bool bgOk = false;
+    if (gTab == Tab::Bg) {
+        const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+        if (bgs.count > 0 && BgRenderer::beginStrip(bgs.names[gBg])) {
+            static uint8_t rowbuf[320 * 2];
+            bgOk = true;
+            for (int r = 0; r < zh && bgOk; ++r) {
+                bgOk = BgRenderer::readStripRow(y0 + r, x0, zw, rowbuf);
+                if (!bgOk) {
+                    break;
+                }
+                for (int c = 0; c < zw; ++c) {
+                    gDrawBuf[r * zw + c] =
+                        static_cast<uint16_t>((rowbuf[c * 2] << 8) | rowbuf[c * 2 + 1]);
+                }
+            }
+            BgRenderer::endStrip();
+        }
+    }
+    if (!bgOk) {
+        for (int i = 0; i < zn; ++i) {
+            gDrawBuf[i] = kPanel;
+        }
     }
 
     /* Hi posam el drago a sobre, amb mirall si toca ✓ */
@@ -282,7 +308,7 @@ void drawAll()
     TFT_eSPI& t = Display::driver();
 
     if (gTab == Tab::Bg) {
-        /* NOMES el fons: cap mascota (aixi es veu tal com serà) ✓ */
+        /* El fons de veritat ✓ */
         const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
         if (bgs.count > 0) {
             BgRenderer::drawFull(bgs.names[gBg]);
@@ -290,13 +316,15 @@ void drawAll()
             t.fillScreen(kPanel);
         }
     } else {
-        /* Fons pla per veure-hi be el drago (i el seu transparent) ✓ */
+        /* Fons pla per veure-hi be el drago ✓ */
         t.fillScreen(kPanel);
-        gMoveT0 = millis();
-        gLastX = kHomeX;
-        gLastY = kHomeY;
-        drawFrameOnly(true);
     }
+    /* El drago, sempre a sobre: a FONS quedara integrat a l'escena ✓ */
+    gMoveT0 = millis();
+    gLastX = kHomeX;
+    gLastY = kHomeY;
+    gFrame = 0;
+    drawFrameOnly(false);
     drawTabs();
     drawControls();
 }
@@ -599,8 +627,7 @@ void loop()
         }
     }
 
-    if (gTab == Tab::Anim && gPlaying && SdAssets::petCount() > 0 &&
-        pet().animCount > 0) {
+    if (gPlaying && SdAssets::petCount() > 0 && pet().animCount > 0) {
         const uint32_t now = millis();
         const uint32_t fps = (pet().fps > 0) ? pet().fps : 6;
         bool need = false;
