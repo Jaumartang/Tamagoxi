@@ -104,6 +104,8 @@ void drawPet(int x, int y)
         return;
     }
     uint16_t* buf = reinterpret_cast<uint16_t*>(gFrameBuf);
+    uint16_t key = 0;                       /* fons del propi frame (cantonades) ✓ */
+    const bool hasKey = SdAssets::frameKey(buf, p.width, p.height, key);
     const int n = p.width * p.height;
     for (int row = 0; row < p.height; ++row) {
         for (int col = 0; col < p.width; ++col) {
@@ -111,7 +113,8 @@ void drawPet(int x, int y)
             const int sc = gFlip ? (p.width - 1 - col) : col;
             const uint16_t raw = buf[row * p.width + sc];
             uint16_t c = static_cast<uint16_t>((raw >> 8) | (raw << 8));   /* BE -> LE */
-            if (p.hasTransparent && c == p.transparent) {
+            if ((hasKey && raw == key) ||
+                (!hasKey && p.hasTransparent && c == p.transparent)) {
                 c = kPanel;                                                /* fons pla */
             }
             buf[row * p.width + col] = c;
@@ -238,12 +241,15 @@ void drawFrameOnly(bool withCounter)
                                gFrameBuf, static_cast<size_t>(p.width) * p.height * 2u,
                                &err)) {
         const uint16_t* src = reinterpret_cast<const uint16_t*>(gFrameBuf);
+        uint16_t key = 0;
+        const bool hasKey = SdAssets::frameKey(src, p.width, p.height, key);
         for (int row = 0; row < p.height; ++row) {
             for (int col = 0; col < p.width; ++col) {
                 const int sc = flip ? (p.width - 1 - col) : col;
                 const uint16_t raw = src[row * p.width + sc];
                 uint16_t c = static_cast<uint16_t>((raw >> 8) | (raw << 8));
-                if (p.hasTransparent && c == p.transparent) {
+                if ((hasKey && raw == key) ||
+                    (!hasKey && p.hasTransparent && c == p.transparent)) {
                     continue;
                 }
                 gDrawBuf[(y - y0 + row) * zw + (x - x0 + col)] = c;

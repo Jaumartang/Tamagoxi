@@ -350,6 +350,12 @@ uint32_t drawFrame()
     const uint16_t transparent = pet.hasTransparent
         ? static_cast<uint16_t>((pet.transparent >> 8) | (pet.transparent << 8))
         : 0u;
+    /* El fons tambe es pot deduir de les cantonades del propi frame, aixi cada
+     * estat pot tenir el seu color de fons encara que el manifest no ho digui. */
+    uint16_t frameBack = 0;
+    const bool hasFrameBack = SdAssets::frameKey(
+        reinterpret_cast<const uint16_t*>(gSpriteFrame), pet.width, pet.height,
+        frameBack);
 
     TFT_eSPI& t = Display::driver();
     const uint32_t t0 = millis();
@@ -391,7 +397,8 @@ uint32_t drawFrame()
 
             for (uint16_t sx = 0; sx < SW; ++sx) {
                 const uint16_t sv = sRowPtr[sx];
-                if (pet.hasTransparent && sv == transparent) {
+                if ((hasFrameBack && sv == frameBack) ||
+                    (pet.hasTransparent && sv == transparent)) {
                     continue;
                 }
                 uint16_t* dst = outRowPtr + static_cast<size_t>(sx) * N;

@@ -462,6 +462,22 @@ bool fileHasSize(const char* path, uint32_t expected)
     return size == expected;
 }
 
+bool frameKey(const uint16_t* buf, int width, int height, uint16_t& key)
+{
+    if (buf == nullptr || width < 2 || height < 2) {
+        return false;
+    }
+    const uint16_t tl = buf[0];                                /* dalt-esquerra */
+    const uint16_t tr = buf[width - 1];                        /* dalt-dreta */
+    const uint16_t bl = buf[(height - 1) * width];             /* baix-esquerra */
+    const uint16_t br = buf[(height - 1) * width + width - 1]; /* baix-dreta */
+    if (tl != tr || tl != bl || tl != br) {
+        return false;
+    }
+    key = tl;
+    return true;
+}
+
 bool readPetFrame(uint8_t petIndex, const char* animName, uint8_t frame,
                   uint8_t* dst, size_t dstBytes, const char** error)
 {

@@ -90,6 +90,12 @@ bool fileHasSize(const char* path, uint32_t expected);
 bool readPetFrame(uint8_t petIndex, const char* animName, uint8_t frame,
                   uint8_t* dst, size_t dstBytes, const char** error);
 
+/* Dedueix el color de fons d'un frame llegit tal qual d'un .bin (pixels
+ * big-endian): si les quatre cantonades coincideixen, aquell es el color
+ * transparent. Aixi cada estat pot tenir el seu propi fons sense haver-ho de
+ * declarar enlloc. Retorna false si les cantonades no coincideixen. */
+bool frameKey(const uint16_t* buf, int width, int height, uint16_t& key);
+
 /* Escriu l'arbre de fitxers (recursiu fins a maxDepth) al stream indicat. */
 void printTree(Print& out, const char* path, uint8_t maxDepth);
 
