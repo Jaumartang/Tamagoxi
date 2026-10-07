@@ -53,7 +53,10 @@ uint32_t gNextMs   = 0;
 uint32_t gMoveT0   = 0;                 /* inici del cicle de la volta */
 int      gLastX    = kHomeX;
 int      gLastY    = kHomeY;
-uint8_t* gFrameBuf = nullptr;           /* 128x128x2 */
+uint8_t*  gFrameBuf = nullptr;          /* 128x128x2: el frame llegit */
+uint16_t* gDrawBuf  = nullptr;          /* zona que canvia (unio vella+nova) */
+constexpr int kZoneW = 296;             /* 128 + els dos salts */
+constexpr int kZoneH = 174;             /* 128 + el botet */
 
 const SdAssets::Pet& pet()
 {
@@ -141,28 +144,62 @@ void patrol(int& x, int& y, bool& flip)
     }
 }
 
-/* Repinta NOMES el frame de la mascota: res d'esborrar ni de repintar la
- * pantalla sencera (aixo era el que feia parpellejar). */
+/* Pinta el frame actual. Compon la ZONA QUE CANVIA (unio de la posicio vella
+ * i la nova) al buffer i l'envia DE COP: aixi no hi ha cap moment en que la
+ * pantalla quedi a mig fer i no parpelleja gens. */
 void drawFrameOnly(bool withCounter)
 {
-    if (SdAssets::petCount() == 0 || pet().animCount == 0) {
+    if (SdAssets::petCount() == 0 || pet().animCount == 0 || gDrawBuf == nullptr) {
         return;
     }
-    int  x = kHomeX;
-    int  y = kHomeY;
+    int  x    = kHomeX;
+    int  y    = kHomeY;
     bool flip = false;
     if (gPlaying) {
         patrol(x, y, flip);
     }
     gFlip = flip;
+    const SdAssets::Pet& p = pet();
+
+    /* Zona = unio de la posicio d'abans i la d'ara ✓ */
+    const int x0 = (gLastX < x) ? gLastX : x;
+    const int y0 = (gLastY < y) ? gLastY : y;
+    const int x1 = ((gLastX > x) ? gLastX : x) + p.width;
+    const int y1 = ((gLastY > y) ? gLastY : y) + p.height;
+    const int zw = x1 - x0;
+    const int zh = y1 - y0;
+    if (zw <= 0 || zh <= 0 || zw > kZoneW || zh > kZoneH) {
+        return;
+    }
+
+    /* Omplim la zona amb el fons pla (aixo esborra la posicio vella ✓) */
+    const int zn = zw * zh;
+    for (int i = 0; i < zn; ++i) {
+        gDrawBuf[i] = kPanel;
+    }
+
+    /* Hi posam el drago a sobre, amb mirall si toca ✓ */
+    const char* err = nullptr;
+    if (SdAssets::readPetFrame(0, p.anims[gAnim].name, static_cast<uint8_t>(gFrame),
+                               gFrameBuf, static_cast<size_t>(p.width) * p.height * 2u,
+                               &err)) {
+        const uint16_t* src = reinterpret_cast<const uint16_t*>(gFrameBuf);
+        for (int row = 0; row < p.height; ++row) {
+            for (int col = 0; col < p.width; ++col) {
+                const int sc = flip ? (p.width - 1 - col) : col;
+                const uint16_t raw = src[row * p.width + sc];
+                uint16_t c = static_cast<uint16_t>((raw >> 8) | (raw << 8));
+                if (p.hasTransparent && c == p.transparent) {
+                    continue;
+                }
+                gDrawBuf[(y - y0 + row) * zw + (x - x0 + col)] = c;
+            }
+        }
+    }
 
     TFT_eSPI& t = Display::driver();
-    const int w = pet().width;
-    const int h = pet().height;
-    if (gLastX != x || gLastY != y) {          /* esborra on era abans ✓ */
-        t.fillRect(gLastX, gLastY, w, h, kPanel);
-    }
-    drawPet(x, y);                             /* queda net: es opac ✓ */
+    t.setSwapBytes(true);
+    t.pushImage(x0, y0, zw, zh, gDrawBuf);     /* UN sol enviament ✓✓ */
     gLastX = x;
     gLastY = y;
 
@@ -539,6 +576,7 @@ void setup()
                       static_cast<unsigned>(r.petWidth), static_cast<unsigned>(r.petHeight),
                       static_cast<unsigned>(r.animCount));
         gFrameBuf = static_cast<uint8_t*>(malloc(128u * 128u * 2u));
+        gDrawBuf = static_cast<uint16_t*>(malloc(static_cast<size_t>(kZoneW) * kZoneH * 2u));
         BgRenderer::begin();          /* reserva el buffer per llegir els fons ✓ */
         drawAll();
     }
