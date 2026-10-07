@@ -15,6 +15,7 @@
  *   el fons i el dragó es veuen barrejats, tal com quedaran de veritat.
  */
 #include <Arduino.h>
+#include <SD.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
 
@@ -71,16 +72,22 @@ void drawPet(int x, int y, int scale)
     TFT_eSPI& t = Display::driver();
     for (int row = 0; row < p.height; ++row) {
         int runStart = -1;
+        uint16_t runColor = 0;
         for (int col = 0; col <= p.width; ++col) {
-            const bool solid = (col < p.width) &&
-                               !(p.hasTransparent && buf[row * p.width + col] == p.transparent);
+            /* Els .bin son RGB565 big-endian: cal girar els bytes ✓ */
+            uint16_t c = 0;
+            bool solid = false;
+            if (col < p.width) {
+                const uint16_t raw = buf[row * p.width + col];
+                c = static_cast<uint16_t>((raw >> 8) | (raw << 8));
+                solid = !(p.hasTransparent && c == p.transparent);
+            }
             if (solid && runStart < 0) {
                 runStart = col;
+                runColor = c;
             } else if (!solid && runStart >= 0) {
-                /* Pintam la tongada amb el color del primer pixel. */
                 t.fillRect(x + runStart * scale, y + row * scale,
-                           (col - runStart) * scale, scale,
-                           buf[row * p.width + runStart]);
+                           (col - runStart) * scale, scale, runColor);
                 runStart = -1;
             }
         }
@@ -224,6 +231,129 @@ void handleTap(int16_t x, int16_t y)
     }
 }
 
+/* --- Generador de manifest.json ----------------------------------------- */
+/* Compta els frames de cada estat i escriu el manifest de la mascota que
+ * enten el firmware. Serveix per packs nous amb un altre nombre de frames. */
+void writeManifest()
+{
+    File pets = SD.open("/pets");
+    if (!pets || !pets.isDirectory()) {
+        Serial.println(F("[TEST] falta la carpeta /pets"));
+        return;
+    }
+    File entry = pets.openNextFile();
+    if (!entry) {
+        pets.close();
+        Serial.println(F("[TEST] /pets es buit"));
+        return;
+    }
+    const char* nm = entry.name();
+    const char* b = strrchr(nm, '/');
+    char petName[24];
+    strlcpy(petName, b ? b + 1 : nm, sizeof(petName));
+    entry.close();
+    pets.close();
+
+    char dirPath[64];
+    snprintf(dirPath, sizeof(dirPath), "/pets/%s", petName);
+    File dir = SD.open(dirPath);
+    if (!dir || !dir.isDirectory()) {
+        Serial.println(F("[TEST] no puc obrir la mascota"));
+        return;
+    }
+
+    static const uint8_t kMaxStates = 24;
+    static char    names[kMaxStates][24];
+    static uint8_t counts[kMaxStates];
+    uint8_t nStates = 0;
+    File st;
+    while ((st = dir.openNextFile()) && nStates < kMaxStates) {
+        if (!st.isDirectory()) {
+            st.close();
+            continue;
+        }
+        const char* sn = st.name();
+        const char* sb = strrchr(sn, '/');
+        uint8_t n = 0;
+        File f;
+        while ((f = st.openNextFile())) {
+            const char* fn = f.name();
+            const char* fb = strrchr(fn, '/');
+            if (strstr(fb ? fb + 1 : fn, ".bin")) {
+                ++n;
+            }
+            f.close();
+            if (n >= 250) {
+                break;
+            }
+        }
+        if (n > 0) {
+            strlcpy(names[nStates], sb ? sb + 1 : sn, 24);
+            counts[nStates] = n;
+            ++nStates;
+        }
+        st.close();
+    }
+    dir.close();
+
+    if (nStates == 0) {
+        Serial.println(F("[TEST] cap estat amb frames"));
+        return;
+    }
+
+    /* Color transparent: el mes repetit del primer frame (els .bin son BE). */
+    char firstPath[96];
+    snprintf(firstPath, sizeof(firstPath), "%s/%s/00.bin", dirPath, names[0]);
+    uint16_t transparent = 0xF81F;
+    File f0 = SD.open(firstPath, FILE_READ);
+    if (f0) {
+        static uint8_t buf[1024];
+        const int n = f0.read(buf, sizeof(buf));
+        f0.close();
+        uint16_t best = 0;
+        int bestCount = 0;
+        for (int i = 0; i + 1 < n; i += 2) {
+            const uint16_t c = static_cast<uint16_t>((buf[i] << 8) | buf[i + 1]);
+            int cnt = 0;
+            for (int j = 0; j + 1 < n; j += 2) {
+                if (static_cast<uint16_t>((buf[j] << 8) | buf[j + 1]) == c) {
+                    ++cnt;
+                }
+            }
+            if (cnt > bestCount) {
+                bestCount = cnt;
+                best = c;
+            }
+        }
+        if (bestCount > (n / 2) / 3) {      /* si domina, es el fons */
+            transparent = best;
+        }
+    }
+
+    snprintf(dirPath, sizeof(dirPath), "/pets/%s/manifest.json", petName);
+    File out = SD.open(dirPath, FILE_WRITE);
+    if (!out) {
+        Serial.println(F("[TEST] no puc escriure el manifest"));
+        return;
+    }
+    char line[128];
+    out.print(F("{\"width\":128,\"height\":128,\"fps\":6,\"transparent\":\"0x"));
+    snprintf(line, sizeof(line), "%04X\",\"animations\":{", transparent);
+    out.print(line);
+    for (uint8_t i = 0; i < nStates; ++i) {
+        snprintf(line, sizeof(line), "%s\"%s\":%u", i ? "," : "", names[i], counts[i]);
+        out.print(line);
+    }
+    out.print(F("}}"));
+    out.close();
+
+    Serial.printf("[TEST] manifest escrit: %u estats, transparent 0x%04X\n", nStates,
+                  transparent);
+    for (uint8_t i = 0; i < nStates; ++i) {
+        Serial.printf("[TEST]   %-10s %u frames\n", names[i], counts[i]);
+    }
+}
+
 /* --- Consola minima (per pilotar-lo des del PC o des del mobil) --------- */
 
 void pollSerial()
@@ -265,6 +395,8 @@ void pollSerial()
                     drawAll();
                     Serial.printf("[TEST] animacio: %s\n", pet().anims[gAnim].name);
                 }
+            } else if (strcmp(line, "manifest") == 0) {
+                writeManifest();
             } else if (strcmp(line, "tab") == 0) {
                 gTab = (gTab == Tab::Bg) ? Tab::Anim : Tab::Bg;
                 drawAll();
