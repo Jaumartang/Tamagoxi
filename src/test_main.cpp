@@ -36,6 +36,11 @@ constexpr uint16_t kText   = TFT_WHITE;
 constexpr int kBarTop = 36;             /* alcada de la barra de pestanyes */
 constexpr int kBarBot = 76;             /* alcada de la barra de controls */
 
+constexpr int kHomeX = 96;              /* on descansa el drago (centre) */
+constexpr int kHomeY = 170;
+constexpr int kHopX  = 84;              /* quant es desplacen els salts */
+constexpr int kHopY  = 46;              /* quant s'enlairen */
+
 enum class Tab : uint8_t { Bg, Anim };
 
 Tab      gTab      = Tab::Bg;
@@ -43,7 +48,11 @@ int      gBg       = 0;
 int      gAnim     = 0;
 int      gFrame    = 0;
 bool     gPlaying  = true;
+bool     gFlip     = false;             /* mirall (quan va cap a l'esquerra) */
 uint32_t gNextMs   = 0;
+uint32_t gMoveT0   = 0;                 /* inici del cicle de la volta */
+int      gLastX    = kHomeX;
+int      gLastY    = kHomeY;
 uint8_t* gFrameBuf = nullptr;           /* 128x128x2 */
 
 const SdAssets::Pet& pet()
@@ -51,9 +60,10 @@ const SdAssets::Pet& pet()
     return SdAssets::pet(0);
 }
 
-/* Pinta el frame actual de la mascota amb les seves transparencies.
- * Ho fa per tongades de pixels seguides: es rapid i queda net. */
-void drawPet(int x, int y, int scale)
+/* Pinta el frame actual de la mascota. Compose el frame al buffer (els pixels
+ * transparents passen a ser el color del fons pla) i l'envia DE COP amb
+ * pushImage: es rapid i no parpelleja gens. */
+void drawPet(int x, int y)
 {
     if (gFrameBuf == nullptr || !SdAssets::report().petsLoaded) {
         return;
@@ -68,51 +78,95 @@ void drawPet(int x, int y, int scale)
                                 gFrameBuf, bytes, &err)) {
         return;
     }
-    const uint16_t* buf = reinterpret_cast<const uint16_t*>(gFrameBuf);
-    TFT_eSPI& t = Display::driver();
-    t.startWrite();
+    uint16_t* buf = reinterpret_cast<uint16_t*>(gFrameBuf);
+    const int n = p.width * p.height;
     for (int row = 0; row < p.height; ++row) {
         for (int col = 0; col < p.width; ++col) {
-            /* Els .bin son RGB565 big-endian: cal girar els bytes ✓ */
-            const uint16_t raw = buf[row * p.width + col];
-            const uint16_t c = static_cast<uint16_t>((raw >> 8) | (raw << 8));
+            /* Amb mirall llegim la columna al reves ✓ */
+            const int sc = gFlip ? (p.width - 1 - col) : col;
+            const uint16_t raw = buf[row * p.width + sc];
+            uint16_t c = static_cast<uint16_t>((raw >> 8) | (raw << 8));   /* BE -> LE */
             if (p.hasTransparent && c == p.transparent) {
-                continue;                       /* transparent: no el pintam */
+                c = kPanel;                                                /* fons pla */
             }
-            t.fillRect(x + col * scale, y + row * scale, scale, scale, c);
+            buf[row * p.width + col] = c;
         }
     }
-    t.endWrite();
+    TFT_eSPI& t = Display::driver();
+    t.setSwapBytes(true);         /* el buffer es LE i el display vol BE ✓ */
+    t.pushImage(x, y, p.width, p.height, buf); /* un sol enviament ✓ */
 }
 
-/* Zona on es pinta la mascota (per poder esborrar NOMES aquella zona). */
-void petRect(int& x, int& y, int& w, int& h)
+/* La volta del drago: pausa al centre, salt a la dreta, pausa, tornada,
+ * salt a l'esquerra (AMB MIRALL), pausa i tornada. Cicle de 6,6 segons. */
+void patrol(int& x, int& y, bool& flip)
 {
-    const SdAssets::Pet& p = pet();
-    const bool anim = (gTab == Tab::Anim);
-    x = anim ? 32 : 96;
-    y = anim ? 110 : 140;
-    w = p.width * (anim ? 2 : 1);
-    h = p.height * (anim ? 2 : 1);
+    const uint32_t p = (millis() - gMoveT0) % 6600;
+    int      dx     = 0;
+    uint32_t mStart = 0;
+    uint32_t mLen   = 0;
+    flip = false;
+
+    if (p < 1200) {                                     /* pausa al centre */
+    } else if (p < 2400) {                              /* cap a la dreta */
+        dx = (kHopX * static_cast<int>(p - 1200)) / 1200;
+        mStart = 1200;
+        mLen = 1200;
+    } else if (p < 3200) {                              /* pausa a la dreta */
+        dx = kHopX;
+    } else if (p < 4400) {                              /* tornada al centre */
+        dx = kHopX - (kHopX * static_cast<int>(p - 3200)) / 1200;
+        mStart = 3200;
+        mLen = 1200;
+    } else if (p < 5400) {                              /* cap a l'esquerra */
+        dx = -(kHopX * static_cast<int>(p - 4400)) / 1000;
+        mStart = 4400;
+        mLen = 1000;
+        flip = true;                                    /* MIRALL ✓ */
+    } else if (p < 6200) {                              /* pausa a l'esquerra */
+        dx = -kHopX;
+        flip = true;
+    } else {                                            /* tornada al centre */
+        dx = -kHopX + (kHopX * static_cast<int>(p - 6200)) / 400;
+        mStart = 6200;
+        mLen = 400;
+        flip = true;
+    }
+
+    x = kHomeX + dx;
+    y = kHomeY;
+    if (mLen > 0) {                                     /* el botet */
+        const float f = static_cast<float>(p - mStart) / static_cast<float>(mLen);
+        y = kHomeY - static_cast<int>(kHopY * sinf(f * 3.14159265f));
+    }
 }
 
-/* Repinta NOMES el frame de la mascota: sense tocar el fons ni les barres, i
- * sense fer un fillScreen (aixo era el que feia parpellejar tota la pantalla). */
-void drawFrameOnly()
+/* Repinta NOMES el frame de la mascota: res d'esborrar ni de repintar la
+ * pantalla sencera (aixo era el que feia parpellejar). */
+void drawFrameOnly(bool withCounter)
 {
     if (SdAssets::petCount() == 0 || pet().animCount == 0) {
         return;
     }
-    int x = 0;
-    int y = 0;
-    int w = 0;
-    int h = 0;
-    petRect(x, y, w, h);
-    TFT_eSPI& t = Display::driver();
-    t.fillRect(x, y, w, h, kPanel);                 /* esborra nomes la seva zona */
-    drawPet(x, y, (gTab == Tab::Anim) ? 2 : 1);
+    int  x = kHomeX;
+    int  y = kHomeY;
+    bool flip = false;
+    if (gPlaying) {
+        patrol(x, y, flip);
+    }
+    gFlip = flip;
 
-    if (gTab == Tab::Anim) {                        /* el comptador de la barra */
+    TFT_eSPI& t = Display::driver();
+    const int w = pet().width;
+    const int h = pet().height;
+    if (gLastX != x || gLastY != y) {          /* esborra on era abans ✓ */
+        t.fillRect(gLastX, gLastY, w, h, kPanel);
+    }
+    drawPet(x, y);                             /* queda net: es opac ✓ */
+    gLastX = x;
+    gLastY = y;
+
+    if (withCounter && gTab == Tab::Anim) {    /* el comptador de la barra */
         char info[32];
         snprintf(info, sizeof(info), "%s  %d/%d", pet().anims[gAnim].name, gFrame + 1,
                  pet().anims[gAnim].frames);
@@ -191,18 +245,20 @@ void drawAll()
     TFT_eSPI& t = Display::driver();
 
     if (gTab == Tab::Bg) {
-        /* El fons de veritat, a pantalla completa, amb el drago a sobre. */
+        /* NOMES el fons: cap mascota (aixi es veu tal com serà) ✓ */
         const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
         if (bgs.count > 0) {
             BgRenderer::drawFull(bgs.names[gBg]);
         } else {
             t.fillScreen(kPanel);
         }
-        drawPet(96, 140, 1);
     } else {
-        /* Fons pla per veure-hi be el drago, una mica mes gran. */
+        /* Fons pla per veure-hi be el drago (i el seu transparent) ✓ */
         t.fillScreen(kPanel);
-        drawPet(32, 110, 2);
+        gMoveT0 = millis();
+        gLastX = kHomeX;
+        gLastY = kHomeY;
+        drawFrameOnly(true);
     }
     drawTabs();
     drawControls();
@@ -256,7 +312,7 @@ void handleTap(int16_t x, int16_t y)
     /* Al mig de la pantalla: a ANIMACIONS avancam un frame; a FONS, canviem. */
     if (gTab == Tab::Anim && pet().animCount > 0) {
         gFrame = (gFrame + 1) % pet().anims[gAnim].frames;
-        drawFrameOnly();
+        drawFrameOnly(true);
     } else {
         changeBg(+1);
     }
@@ -505,16 +561,27 @@ void loop()
         }
     }
 
-    if (gTab == Tab::Anim && gPlaying && SdAssets::petCount() > 0) {
-        const SdAssets::Pet& p = pet();
-        if (p.animCount > 0) {
-            const uint32_t now = millis();
-            const uint32_t fps = (p.fps > 0) ? p.fps : 6;
-            if (now >= gNextMs) {
-                gNextMs = now + 1000u / fps;
-                gFrame = (gFrame + 1) % p.anims[gAnim].frames;
-                drawFrameOnly();
-            }
+    if (gTab == Tab::Anim && gPlaying && SdAssets::petCount() > 0 &&
+        pet().animCount > 0) {
+        const uint32_t now = millis();
+        const uint32_t fps = (pet().fps > 0) ? pet().fps : 6;
+        bool need = false;
+        bool counter = false;
+        if (now >= gNextMs) {                     /* següent frame de l'animacio */
+            gNextMs = now + 1000u / fps;
+            gFrame = (gFrame + 1) % pet().anims[gAnim].frames;
+            need = true;
+            counter = true;
+        }
+        int  px = 0;
+        int  py = 0;
+        bool pf = false;
+        patrol(px, py, pf);                       /* la volta (a fons ✓) */
+        if (px != gLastX || py != gLastY) {
+            need = true;
+        }
+        if (need) {
+            drawFrameOnly(counter);
         }
     }
     delay(5);
