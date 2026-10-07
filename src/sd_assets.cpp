@@ -202,6 +202,96 @@ bool readPetManifest(const char* folder, SdAssets::Pet& p)
         }
     }
 
+    /* SEMPRE escanejam la carpeta de la mascota: els fitxers son la veritat ✓
+     * Aixi, si el manifest es vell o li falten estats, els trobam igualment. */
+    {
+        char animPath[kPathLen];
+        snprintf(animPath, sizeof(animPath), "/pets/%s", folder);
+        File dir = SD.open(animPath);
+        if (dir && dir.isDirectory()) {
+            File st;
+            while ((st = dir.openNextFile()) && p.animCount < SdAssets::kMaxAnims) {
+                if (st.isDirectory()) {
+                    uint8_t n = 0;
+                    File ff;
+                    while ((ff = st.openNextFile())) {
+                        const char* fb = baseName(ff.name());
+                        if (strstr(fb, ".bin") != nullptr) {
+                            ++n;
+                        }
+                        ff.close();
+                        if (n >= 250) {
+                            break;
+                        }
+                    }
+                    if (n > 0) {
+                        const char* nm = baseName(st.name());
+                        int found = -1;
+                        for (uint8_t k = 0; k < p.animCount; ++k) {
+                            if (strcmp(p.anims[k].name, nm) == 0) {
+                                found = k;
+                                break;
+                            }
+                        }
+                        if (found >= 0) {
+                            p.anims[found].frames = n;      /* la carpeta mana ✓ */
+                        } else {
+                            strlcpy(p.anims[p.animCount].name, nm, SdAssets::kNameLen);
+                            p.anims[p.animCount].frames = n;
+                            ++p.animCount;
+                            Serial.printf("[SD/PET] estat nou trobat: %s (%u frames)\n", nm, n);
+                        }
+                    }
+                }
+                st.close();
+            }
+            dir.close();
+        }
+        /* Que IDLE quedi primera: es la reserva de tothom ✓ */
+        for (uint8_t k = 1; k < p.animCount; ++k) {
+            if (strcmp(p.anims[k].name, "IDLE") == 0) {
+                const SdAssets::Anim tmp = p.anims[0];
+                p.anims[0] = p.anims[k];
+                p.anims[k] = tmp;
+                break;
+            }
+        }
+    }
+
+    /* I si no ens diuen el color transparent, el deduim del primer frame ✓ */
+    if (!p.hasTransparent && p.animCount > 0 && p.width > 0) {
+        char firstPath[kPathLen];
+        snprintf(firstPath, sizeof(firstPath), "/pets/%s/%s/00.bin", folder,
+                 p.anims[0].name);
+        File f0 = SD.open(firstPath, FILE_READ);
+        if (f0) {
+            uint8_t sample[512];
+            const int n = f0.read(sample, sizeof(sample));
+            f0.close();
+            uint16_t best = 0;
+            int bestCount = 0;
+            for (int i = 0; i + 1 < n; i += 2) {
+                const uint16_t c = static_cast<uint16_t>((sample[i] << 8) | sample[i + 1]);
+                int cnt = 0;
+                for (int j = 0; j + 1 < n; j += 2) {
+                    if (static_cast<uint16_t>((sample[j] << 8) | sample[j + 1]) == c) {
+                        ++cnt;
+                    }
+                }
+                if (cnt > bestCount) {
+                    bestCount = cnt;
+                    best = c;
+                }
+            }
+            if (bestCount > (n / 2) / 3) {
+                p.transparent = best;
+                p.hasTransparent = true;
+                Serial.printf("[SD/PET] transparent deduit del frame: 0x%04X\n",
+                              static_cast<unsigned>(best));
+            }
+        }
+    }
+
     return (p.width > 0) && (p.height > 0) && (p.animCount > 0);
 }
 
