@@ -20,8 +20,8 @@
 
 #include "tg_link.h"
 
-constexpr int    kTxPin   = 17;       /* connector lliure de la placa: IO17 (TX) */
-constexpr int    kRxPin   = 16;       /* i IO16 (RX) -> la consola USB queda lliure ✓ */
+constexpr int    kTxPin   = 26;       /* pins triats lliures del DevKit ✓ */
+constexpr int    kRxPin   = 25;       /* (el 16/17 potser s'ha fet malbe) */
 constexpr int    kLedPin  = 2;        /* LED blau de la placa */
 constexpr size_t kLineMax = 1200;   /* tambe hi passen els trossos de firmware */
 
@@ -50,7 +50,6 @@ void reply(const char* cmd, const char* arg)
     pinMode(kTxPin, OUTPUT);
     Serial2.write(reinterpret_cast<const uint8_t*>(frame), static_cast<size_t>(n));
     Serial2.flush();
-    pinMode(kTxPin, INPUT);          /* alla! (l'altra placa te pull-up a la linia) */
     ++gSent;
     /* Ho diem tambe pel USB (aixo no va per l'enllac): aixi es veu la conversa. */
     if (strcmp(cmd, "OTAD") != 0) {
@@ -167,8 +166,44 @@ void setup()
     gLastHello = millis();
 }
 
+/* Ordres pel monitor USB (aquestes NO van per l'enllac: el seu fil es Serial2).
+ * Serveixen per provar la linia fisica quan la tornada no arriba. */
+void pollConsole()
+{
+    static char   line[24];
+    static size_t n = 0;
+    while (Serial.available() > 0) {
+        const int ch = Serial.read();
+        if (ch < 0) {
+            break;
+        }
+        if (ch == '\n' || ch == '\r') {
+            line[n] = '\0';
+            n = 0;
+            if (strcmp(line, "LOW") == 0) {
+                pinMode(kTxPin, OUTPUT);
+                digitalWrite(kTxPin, LOW);
+                Serial.println(F("[AMI] TX en BAIX: la linia queda tirada a terra"));
+            } else if (strcmp(line, "FREQ") == 0) {
+                Serial.println(F("[AMI] tornant a la UART..."));
+                Serial2.end();
+                Serial2.begin(TgLink::kBaud, SERIAL_8N1, kRxPin, kTxPin);
+            } else if (line[0] != '\0') {
+                Serial.println(F("[AMI] ordres: LOW = tira la linia a terra, FREQ = torna a la UART"));
+            }
+            continue;
+        }
+        if (n + 1 < sizeof(line)) {
+            line[n++] = static_cast<char>(ch);
+        } else {
+            n = 0;
+        }
+    }
+}
+
 void loop()
 {
+    pollConsole();
     while (Serial2.available() > 0) {
         const int ch = Serial2.read();
         if (ch < 0) {
