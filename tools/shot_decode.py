@@ -56,6 +56,21 @@ class Device:
         self.baud = BASE_BAUD
         self.ser = serial.Serial(port, BASE_BAUD, timeout=0.05)
         time.sleep(0.2)
+        # Reiniciem la placa: si estigués en mode enllac (UART a 921600) la
+        # consola estaria muda i no ens hi podríem entendre.
+        self.ser.setDTR(False)
+        self.ser.setRTS(True)
+        time.sleep(0.15)
+        self.ser.setRTS(False)
+        self.drain()
+        # La placa engega l'enllac amb el xip amic tota sola als 4 s d'arrencar
+        # (aixi tambe funciona amb bateria). Si li escrivim alguna cosa durant
+        # aquella estona, es queda en mode consola i no ens la pren. Ho repetim
+        # uns quants segons per assegurar-nos que cau dins la seva finestra.
+        for _ in range(12):
+            self.ser.write(b"x\n")
+            self.ser.flush()
+            time.sleep(1.0)
         self.drain()
         if baud != BASE_BAUD:
             self.set_baud(baud)
