@@ -70,27 +70,58 @@ void drawPet(int x, int y, int scale)
     }
     const uint16_t* buf = reinterpret_cast<const uint16_t*>(gFrameBuf);
     TFT_eSPI& t = Display::driver();
+    t.startWrite();
     for (int row = 0; row < p.height; ++row) {
-        int runStart = -1;
-        uint16_t runColor = 0;
-        for (int col = 0; col <= p.width; ++col) {
+        for (int col = 0; col < p.width; ++col) {
             /* Els .bin son RGB565 big-endian: cal girar els bytes ✓ */
-            uint16_t c = 0;
-            bool solid = false;
-            if (col < p.width) {
-                const uint16_t raw = buf[row * p.width + col];
-                c = static_cast<uint16_t>((raw >> 8) | (raw << 8));
-                solid = !(p.hasTransparent && c == p.transparent);
+            const uint16_t raw = buf[row * p.width + col];
+            const uint16_t c = static_cast<uint16_t>((raw >> 8) | (raw << 8));
+            if (p.hasTransparent && c == p.transparent) {
+                continue;                       /* transparent: no el pintam */
             }
-            if (solid && runStart < 0) {
-                runStart = col;
-                runColor = c;
-            } else if (!solid && runStart >= 0) {
-                t.fillRect(x + runStart * scale, y + row * scale,
-                           (col - runStart) * scale, scale, runColor);
-                runStart = -1;
-            }
+            t.fillRect(x + col * scale, y + row * scale, scale, scale, c);
         }
+    }
+    t.endWrite();
+}
+
+/* Zona on es pinta la mascota (per poder esborrar NOMES aquella zona). */
+void petRect(int& x, int& y, int& w, int& h)
+{
+    const SdAssets::Pet& p = pet();
+    const bool anim = (gTab == Tab::Anim);
+    x = anim ? 32 : 96;
+    y = anim ? 110 : 140;
+    w = p.width * (anim ? 2 : 1);
+    h = p.height * (anim ? 2 : 1);
+}
+
+/* Repinta NOMES el frame de la mascota: sense tocar el fons ni les barres, i
+ * sense fer un fillScreen (aixo era el que feia parpellejar tota la pantalla). */
+void drawFrameOnly()
+{
+    if (SdAssets::petCount() == 0 || pet().animCount == 0) {
+        return;
+    }
+    int x = 0;
+    int y = 0;
+    int w = 0;
+    int h = 0;
+    petRect(x, y, w, h);
+    TFT_eSPI& t = Display::driver();
+    t.fillRect(x, y, w, h, kPanel);                 /* esborra nomes la seva zona */
+    drawPet(x, y, (gTab == Tab::Anim) ? 2 : 1);
+
+    if (gTab == Tab::Anim) {                        /* el comptador de la barra */
+        char info[32];
+        snprintf(info, sizeof(info), "%s  %d/%d", pet().anims[gAnim].name, gFrame + 1,
+                 pet().anims[gAnim].frames);
+        const int by = 480 - kBarBot + 8;
+        t.fillRect(70, by, 180, 22, kPanel);
+        t.setTextDatum(MC_DATUM);
+        t.setTextFont(2);
+        t.setTextColor(kText, kPanel);
+        t.drawString(info, 160, by + 10);
     }
 }
 
@@ -225,7 +256,7 @@ void handleTap(int16_t x, int16_t y)
     /* Al mig de la pantalla: a ANIMACIONS avancam un frame; a FONS, canviem. */
     if (gTab == Tab::Anim && pet().animCount > 0) {
         gFrame = (gFrame + 1) % pet().anims[gAnim].frames;
-        drawAll();
+        drawFrameOnly();
     } else {
         changeBg(+1);
     }
@@ -452,6 +483,7 @@ void setup()
                       static_cast<unsigned>(r.petWidth), static_cast<unsigned>(r.petHeight),
                       static_cast<unsigned>(r.animCount));
         gFrameBuf = static_cast<uint8_t*>(malloc(128u * 128u * 2u));
+        BgRenderer::begin();          /* reserva el buffer per llegir els fons ✓ */
         drawAll();
     }
     gNextMs = millis();
@@ -481,7 +513,7 @@ void loop()
             if (now >= gNextMs) {
                 gNextMs = now + 1000u / fps;
                 gFrame = (gFrame + 1) % p.anims[gAnim].frames;
-                drawAll();
+                drawFrameOnly();
             }
         }
     }
