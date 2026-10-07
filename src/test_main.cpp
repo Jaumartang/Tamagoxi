@@ -42,21 +42,43 @@ constexpr int kHopX  = 84;              /* quant es desplacen els salts */
 constexpr int kHopY  = 46;              /* quant s'enlairen */
 
 enum class Tab : uint8_t { Bg, Anim };
+enum class Act : uint8_t { Idle, Patrol };
 
 Tab      gTab      = Tab::Bg;
+Act      gAct      = Act::Idle;
 int      gBg       = 0;
 int      gAnim     = 0;
 int      gFrame    = 0;
 bool     gPlaying  = true;
 bool     gFlip     = false;             /* mirall (quan va cap a l'esquerra) */
-uint32_t gNextMs   = 0;
+uint32_t gNextMs   = 0;                 /* seguent frame de l'animacio */
+uint32_t gActUntil = 0;                 /* quan s'acaba el que esta fent */
+uint32_t gBobUntil = 0;                 /* estiradeta curta en quedar-se quiet */
 uint32_t gMoveT0   = 0;                 /* inici del cicle de la volta */
+bool     gPatrolNext = false;           /* despres de la pausa, volta? */
 int      gLastX    = kHomeX;
 int      gLastY    = kHomeY;
 uint8_t*  gFrameBuf = nullptr;          /* 128x128x2: el frame llegit */
 uint16_t* gDrawBuf  = nullptr;          /* zona que canvia (unio vella+nova) */
 constexpr int kZoneW = 296;             /* 128 + els dos salts */
 constexpr int kZoneH = 174;             /* 128 + el botet */
+
+/* --- El que fa el drago: quiet o fent la volta --------------------------- */
+
+void enterIdle()
+{
+    gAct = Act::Idle;
+    gActUntil = millis() + 3000 + random(0, 6500);   /* quiet de 3 a 9,5 s */
+    gPatrolNext = (random(0, 100) < 65);             /* 65%: despres volta */
+    gBobUntil = millis() + 1400;                     /* una estiradeta curta */
+}
+
+void enterPatrol()
+{
+    gAct = Act::Patrol;
+    gMoveT0 = millis();
+    gActUntil = gMoveT0 + 6600;                      /* la volta dura 6,6 s */
+}
 
 const SdAssets::Pet& pet()
 {
@@ -100,10 +122,16 @@ void drawPet(int x, int y)
     t.pushImage(x, y, p.width, p.height, buf); /* un sol enviament ✓ */
 }
 
-/* La volta del drago: pausa al centre, salt a la dreta, pausa, tornada,
- * salt a l'esquerra (AMB MIRALL), pausa i tornada. Cicle de 6,6 segons. */
+/* La posicio del drago: quiet al centre o fent la volta (amb mirall quan toca).
+ * El drago mira sempre cap on va ✓ */
 void patrol(int& x, int& y, bool& flip)
 {
+    x = kHomeX;
+    y = kHomeY;
+    flip = false;
+    if (gAct != Act::Patrol) {
+        return;                                         /* quiet al centre */
+    }
     const uint32_t p = (millis() - gMoveT0) % 6600;
     int      dx     = 0;
     uint32_t mStart = 0;
@@ -374,9 +402,18 @@ void handleTap(int16_t x, int16_t y)
         }
         return;
     }
-    /* Al mig de la pantalla: a ANIMACIONS avancam un frame; a FONS, canviem. */
-    if (gTab == Tab::Anim && pet().animCount > 0) {
-        gFrame = (gFrame + 1) % pet().anims[gAnim].frames;
+    /* Al mig de la pantalla */
+    int dx = 0;
+    int dy = 0;
+    bool df = false;
+    patrol(dx, dy, df);
+    const SdAssets::Pet& p = pet();
+    if (x >= dx && x < dx + p.width && y >= dy && y < dy + p.height) {
+        enterPatrol();                 /* li has tocat: fa la volta ✓ */
+        return;
+    }
+    if (gTab == Tab::Anim && p.animCount > 0) {
+        gFrame = (gFrame + 1) % p.anims[gAnim].frames;
         drawFrameOnly(true);
     } else {
         changeBg(+1);
@@ -606,6 +643,8 @@ void setup()
         gFrameBuf = static_cast<uint8_t*>(malloc(128u * 128u * 2u));
         gDrawBuf = static_cast<uint16_t*>(malloc(static_cast<size_t>(kZoneW) * kZoneH * 2u));
         BgRenderer::begin();          /* reserva el buffer per llegir els fons ✓ */
+        randomSeed(esp_random());     /* que les voltes siguin ben aleatories ✓ */
+        enterIdle();
         drawAll();
     }
     gNextMs = millis();
@@ -627,12 +666,23 @@ void loop()
         }
     }
 
+    /* El que fa el drago: quiet o fent la volta ✓ */
+    const uint32_t now = millis();
+    if (now >= gActUntil) {
+        if (gAct == Act::Patrol || !gPatrolNext) {
+            enterIdle();
+        } else {
+            enterPatrol();
+        }
+    }
+
     if (gPlaying && SdAssets::petCount() > 0 && pet().animCount > 0) {
-        const uint32_t now = millis();
-        const uint32_t fps = (pet().fps > 0) ? pet().fps : 6;
+        /* Els frames nomes van quan es mou o durant l'estiradeta ✓ */
+        const bool anim = (gAct == Act::Patrol) || (now < gBobUntil);
         bool need = false;
         bool counter = false;
-        if (now >= gNextMs) {                     /* següent frame de l'animacio */
+        if (anim && now >= gNextMs) {
+            const uint32_t fps = (pet().fps > 0) ? pet().fps : 6;
             gNextMs = now + 1000u / fps;
             gFrame = (gFrame + 1) % pet().anims[gAnim].frames;
             need = true;
@@ -641,7 +691,7 @@ void loop()
         int  px = 0;
         int  py = 0;
         bool pf = false;
-        patrol(px, py, pf);                       /* la volta (a fons ✓) */
+        patrol(px, py, pf);                       /* es mou? ✓ */
         if (px != gLastX || py != gLastY) {
             need = true;
         }
