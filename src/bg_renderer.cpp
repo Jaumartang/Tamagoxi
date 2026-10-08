@@ -86,6 +86,10 @@ uint32_t drawFull(const char* name)
     }
 
     TFT_eSPI& t = Display::driver();
+    /* Els bytes de la SD ja venen en big-endian (com els vol la pantalla). Ens
+     * assegurem de NO dur el byte-swap activat que pugui haver deixat el dibuix
+     * de la mascota; si no, el fons sortiria amb els colors intercanviats. */
+    t.setSwapBytes(false);
     const uint32_t t0 = millis();
 
     /* Una sola finestra per a tot el fons: cada franja hi va consecutivament. */
@@ -159,6 +163,7 @@ uint32_t drawRegion(const char* name, int x, int y, int w, int h)
     }
 
     TFT_eSPI& t = Display::driver();
+    t.setSwapBytes(false);      /* els bytes de la SD son big-endian ✓ */
     const uint32_t t0 = millis();
     bool ok = true;
 
