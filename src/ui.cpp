@@ -41,9 +41,13 @@ const Theme kThemes[] = {
     {0x28E8, 0xAC1B, 0x520D, 0xCADB, 0xB98B, {0xE332, 0xDA99, 0x8A9C, 0xABDC}},
     /* rosa pastel */
     {0x7A8C, 0xFEFD, 0xAC12, 0xFBD5, 0xD28F, {0xFC72, 0xF376, 0xBB79, 0xDCBC}},
+    /* grafite minimalista: superficies fosques i neutres, un sol accent teal i
+     * les files harmonitzades i desaturades (estil "gadget professional"). */
+    {0x1904, 0x3A09, 0x2146, 0x2E36, 0x52ED, {0x2D73, 0x4BD7, 0xDD28, 0x9BF7}},
 };
 constexpr uint8_t kThemeCount = static_cast<uint8_t>(sizeof(kThemes) / sizeof(kThemes[0]));
-const char* const kThemeNames[kThemeCount] = {"rosa-lila", "nit-violeta", "rosa-pastel"};
+const char* const kThemeNames[kThemeCount] = {"rosa-lila", "nit-violeta", "rosa-pastel",
+                                              "grafite"};
 
 uint8_t gThemeIndex = 0;
 
