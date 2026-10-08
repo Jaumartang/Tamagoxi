@@ -549,6 +549,53 @@ void writeManifest()
     }
 }
 
+/* --- Diagnostica: mira els pixels de les vores del frame actual --------- */
+
+void probeFrame()
+{
+    const SdAssets::Pet& p = pet();
+    if (gFrameBuf == nullptr || p.animCount == 0 || gAnim >= p.animCount) {
+        Serial.println(F("[PROBE] res a mirar"));
+        return;
+    }
+    const char* err = nullptr;
+    if (!SdAssets::readPetFrame(0, p.anims[gAnim].name, static_cast<uint8_t>(gFrame),
+                                gFrameBuf, static_cast<size_t>(p.width) * p.height * 2u,
+                                &err)) {
+        Serial.printf("[PROBE] no llegit: %s\n", err != nullptr ? err : "?");
+        return;
+    }
+    const uint16_t* b = reinterpret_cast<const uint16_t*>(gFrameBuf);
+    uint16_t key = 0;
+    const bool hasKey = SdAssets::frameKey(b, p.width, p.height, key);
+    const auto sw = [](uint16_t v) { return static_cast<uint16_t>((v >> 8) | (v << 8)); };
+
+    Serial.printf("[PROBE] %s frame %d/%u  %ux%u  fons=%s%04X  manifest=%04X\n",
+                  p.anims[gAnim].name, gFrame, p.anims[gAnim].frames, p.width, p.height,
+                  hasKey ? "0x" : "(cap)0x", sw(key),
+                  p.hasTransparent ? p.transparent : 0);
+    Serial.print(F("[PROBE] esquerra: "));
+    for (int y = 0; y < p.height; y += p.height / 8) {
+        Serial.printf("%04X ", sw(b[y * p.width]));
+    }
+    Serial.println();
+    Serial.print(F("[PROBE] dreta   : "));
+    for (int y = 0; y < p.height; y += p.height / 8) {
+        Serial.printf("%04X ", sw(b[y * p.width + p.width - 1]));
+    }
+    Serial.println();
+    Serial.print(F("[PROBE] dalt    : "));
+    for (int x = 0; x < p.width; x += p.width / 8) {
+        Serial.printf("%04X ", sw(b[x]));
+    }
+    Serial.println();
+    Serial.print(F("[PROBE] baix    : "));
+    for (int x = 0; x < p.width; x += p.width / 8) {
+        Serial.printf("%04X ", sw(b[(p.height - 1) * p.width + x]));
+    }
+    Serial.println();
+}
+
 /* --- Consola minima (per pilotar-lo des del PC o des del mobil) --------- */
 
 void pollSerial()
@@ -592,6 +639,8 @@ void pollSerial()
                 }
             } else if (strcmp(line, "manifest") == 0) {
                 writeManifest();
+            } else if (strcmp(line, "probe") == 0) {
+                probeFrame();
             } else if (strcmp(line, "tab") == 0) {
                 gTab = (gTab == Tab::Bg) ? Tab::Anim : Tab::Bg;
                 drawAll();
