@@ -31,8 +31,8 @@ constexpr uint8_t kMaxScale = 3;
  * s'engrandeix una mica perque el drac pugui saltar/botar sense sortir-se'n ni
  * quedar tallat. El fons del rectangle es repinta a cada frame, aixi que el
  * moviment no deixa rastre ni parpelleig. */
-constexpr int8_t  kMoveMaxX = 16;
-constexpr int8_t  kMoveMaxY = 16;
+constexpr int8_t  kMoveMaxX = 10;
+constexpr int8_t  kMoveMaxY = 10;
 constexpr int16_t kPadX     = kMoveMaxX * 2;   /* marge total horitzontal */
 constexpr int16_t kPadY     = kMoveMaxY;       /* marge vertical (cap amunt) */
 
@@ -51,7 +51,7 @@ uint32_t gBobUntil   = 0;
 uint32_t gMoveT0     = 0;
 bool     gPatrolNext = false;
 uint32_t gMoveTimer  = 0;
-constexpr uint32_t kMoveStepMs = 60;   /* refresc del moviment (~16 fps) */
+constexpr uint32_t kMoveStepMs = 110;   /* refresc del moviment (~9 fps: menys parpelleig) */
 
 bool ieq(const char* a, const char* b)
 {
