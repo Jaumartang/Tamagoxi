@@ -38,6 +38,31 @@ const char* baseName(const char* path)
     return slash != nullptr ? slash + 1 : path;
 }
 
+/* Un frame es diu "NN.bin" (nomes digits). Aixi ignorem els fitxers bessons
+ * que crea el Mac en copiar a la targeta ("._00.bin"): sense aixo, 10 frames
+ * de debò es comptaven com a 20! */
+bool isFrameBin(const char* base)
+{
+    if (base == nullptr || base[0] == '.') {
+        return false;
+    }
+    const size_t n = strlen(base);
+    if (n < 5) {                              /* com a minim "0.bin" */
+        return false;
+    }
+    const char* ext = base + n - 4;
+    if (!(ext[0] == '.' && (ext[1] == 'b' || ext[1] == 'B') &&
+          (ext[2] == 'i' || ext[2] == 'I') && (ext[3] == 'n' || ext[3] == 'N'))) {
+        return false;
+    }
+    for (const char* q = base; q < ext; ++q) {
+        if (*q < '0' || *q > '9') {
+            return false;
+        }
+    }
+    return true;
+}
+
 /* --- Muntatge de la targeta ------------------------------------------------ */
 
 bool mountCard()
@@ -216,7 +241,7 @@ bool readPetManifest(const char* folder, SdAssets::Pet& p)
                     File ff;
                     while ((ff = st.openNextFile())) {
                         const char* fb = baseName(ff.name());
-                        if (strstr(fb, ".bin") != nullptr) {
+                        if (isFrameBin(fb)) {
                             ++n;
                         }
                         ff.close();
