@@ -1820,6 +1820,21 @@ void loop()
             updateInfo();
         }
     } else if (gScreen == Screen::PetTest) {
+        /* Premuda llarga enlloc = tornar a la pantalla principal ✓ (aixi no ens
+         * hi quedem atrapats: la pantalla de proves no te boto de sortir). */
+        if (pressed) {
+            if (gPressStart == 0) {
+                gPressStart = millis();
+            }
+            if (!gLongPressDone && (millis() - gPressStart >= 1500)) {
+                gLongPressDone = true;
+                Serial.println(F("[GFX] premuda llarga -> pantalla principal"));
+                startHome();
+            }
+        } else {
+            gPressStart = 0;
+            gLongPressDone = false;
+        }
         if (SpriteRenderer::isActive()) {
             if (tap) {
                 /* TEST DE GRAFICS: tocar el drac canvia d'animacio; tocar fora
