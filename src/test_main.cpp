@@ -125,15 +125,54 @@ void drawPet(int x, int y)
     t.pushImage(x, y, p.width, p.height, buf); /* un sol enviament ✓ */
 }
 
-/* La posicio del drago: quiet al centre o fent la volta (amb mirall quan toca).
- * El drago mira sempre cap on va ✓ */
+/* --- Com es mou cada estat ✓ -------------------------------------------- */
+
+enum class Move : uint8_t { Still, Patrol, Bounce };
+
+const char* animName()
+{
+    const SdAssets::Pet& p = pet();
+    return (p.animCount > 0 && gAnim < p.animCount) ? p.anims[gAnim].name : nullptr;
+}
+
+/* Cada estat te la seva manera de moure's pel mon ✓ */
+Move moveFor(const char* name)
+{
+    if (name == nullptr) {
+        return Move::Patrol;
+    }
+    if (strcmp(name, "SAD") == 0 || strcmp(name, "SLEEP") == 0 ||
+        strcmp(name, "SICK") == 0 || strcmp(name, "HUNGRY") == 0 ||
+        strcmp(name, "ANGRY") == 0 || strcmp(name, "DRINK") == 0 ||
+        strcmp(name, "EAT") == 0) {
+        return Move::Still;              /* trist, dormit, malalt...: quiet ✓ */
+    }
+    if (strcmp(name, "HAPPY") == 0 || strcmp(name, "PLAY") == 0 ||
+        strcmp(name, "LOVE") == 0 || strcmp(name, "CELEBRATE") == 0 ||
+        strcmp(name, "CURIOUS") == 0) {
+        return Move::Bounce;             /* content: botet al lloc ✓ */
+    }
+    return Move::Patrol;                 /* IDLE, WALK, BLINK, EXTRA... ✓ */
+}
+
+/* La posicio del drago segons el seu estat. Mira sempre cap on va ✓ */
 void patrol(int& x, int& y, bool& flip)
 {
     x = kHomeX;
     y = kHomeY;
     flip = false;
-    if (gAct != Act::Patrol) {
-        return;                                         /* quiet al centre */
+
+    const Move m = moveFor(animName());
+    if (m == Move::Bounce) {
+        /* Botet al lloc (content ✓): puja i baixa sense moure's de costat ✓ */
+        const uint32_t half = 700u;
+        const uint32_t ph = (millis() - gMoveT0) % (2u * half);
+        const uint32_t up = (ph < half) ? ph : (2u * half - ph);
+        y = kHomeY - static_cast<int>((static_cast<uint32_t>(kHopY) * up) / (2u * half));
+        return;
+    }
+    if (m == Move::Still || gAct != Act::Patrol) {
+        return;                                         /* quiet al centre ✓ */
     }
     const uint32_t p = (millis() - gMoveT0) % 6600;
     int      dx     = 0;
@@ -415,7 +454,12 @@ void handleTap(int16_t x, int16_t y)
     patrol(dx, dy, df);
     const SdAssets::Pet& p = pet();
     if (x >= dx && x < dx + p.width && y >= dy && y < dy + p.height) {
-        enterPatrol();                 /* li has tocat: fa la volta ✓ */
+        const Move m = moveFor(animName());
+        if (m == Move::Patrol) {
+            enterPatrol();                 /* li has tocat: fa la volta ✓ */
+        } else if (m == Move::Bounce) {
+            gMoveT0 = millis();            /* content: li ha agradat el toc ✓ */
+        }
         return;
     }
     if (gTab == Tab::Anim && p.animCount > 0) {
@@ -723,7 +767,8 @@ void loop()
 
     /* El que fa el drago: quiet o fent la volta ✓ */
     const uint32_t now = millis();
-    if (now >= gActUntil) {
+    const Move     mov = moveFor(animName());
+    if (mov == Move::Patrol && now >= gActUntil) {
         if (gAct == Act::Patrol || !gPatrolNext) {
             enterIdle();
         } else {
@@ -732,12 +777,20 @@ void loop()
     }
 
     if (gPlaying && SdAssets::petCount() > 0 && pet().animCount > 0) {
-        /* Els frames nomes van quan es mou o durant l'estiradeta ✓ */
-        const bool anim = (gAct == Act::Patrol) || (now < gBobUntil);
+        /* Quan van els frames depen de com es mou l'estat ✓ */
+        bool anim = false;
+        uint32_t fps = (pet().fps > 0) ? pet().fps : 6;
+        if (mov == Move::Bounce) {
+            anim = true;                              /* content: sempre animat ✓ */
+        } else if (mov == Move::Still) {
+            anim = true;                              /* quiet pero viu ✓ */
+            fps = (fps > 2) ? (fps / 2) : 2;          /* ...a poc a poc ✓ */
+        } else {
+            anim = (gAct == Act::Patrol) || (now < gBobUntil);
+        }
         bool need = false;
         bool counter = false;
         if (anim && now >= gNextMs) {
-            const uint32_t fps = (pet().fps > 0) ? pet().fps : 6;
             gNextMs = now + 1000u / fps;
             gFrame = (gFrame + 1) % pet().anims[gAnim].frames;
             need = true;
