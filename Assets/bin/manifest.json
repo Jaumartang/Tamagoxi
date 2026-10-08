@@ -1,0 +1,11 @@
+{
+ "width": 128,
+ "height": 128,
+ "fps": 6,
+ "transparent": "0xF81F",
+ "animations": {
+  "HAPPY": 10,
+  "IDLE": 10,
+  "SAD": 10
+ }
+}
