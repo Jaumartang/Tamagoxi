@@ -489,17 +489,42 @@ bool fileHasSize(const char* path, uint32_t expected)
 
 bool frameKey(const uint16_t* buf, int width, int height, uint16_t& key)
 {
-    if (buf == nullptr || width < 2 || height < 2) {
+    if (buf == nullptr || width < 4 || height < 4) {
         return false;
     }
-    const uint16_t tl = buf[0];                                /* dalt-esquerra */
-    const uint16_t tr = buf[width - 1];                        /* dalt-dreta */
-    const uint16_t bl = buf[(height - 1) * width];             /* baix-esquerra */
-    const uint16_t br = buf[(height - 1) * width + width - 1]; /* baix-dreta */
-    if (tl != tr || tl != bl || tl != br) {
+    /* Mostrejem tot l'anell exterior (cada 4 pixels) i ens quedam amb el color
+     * que hi surt mes sovint: aquest es el fons de la imatge. Aixi funciona amb
+     * qualsevol color de fons (magenta, blanc...) i tambe en els frames on el
+     * dibuix tapa alguna cantonada. */
+    uint16_t samp[200];
+    int n = 0;
+    for (int x = 0; x < width && n < 200; x += 4) {
+        samp[n++] = buf[x];                              /* fila de dalt */
+        samp[n++] = buf[(height - 1) * width + x];       /* fila de baix */
+    }
+    for (int y = 0; y < height && n < 200; y += 4) {
+        samp[n++] = buf[y * width];                      /* columna esquerra */
+        samp[n++] = buf[y * width + width - 1];          /* columna dreta */
+    }
+
+    uint16_t best = 0;
+    int bestCount = 0;
+    for (int i = 0; i < n; ++i) {
+        int c = 0;
+        for (int j = 0; j < n; ++j) {
+            if (samp[j] == samp[i]) {
+                ++c;
+            }
+        }
+        if (c > bestCount) {
+            bestCount = c;
+            best = samp[i];
+        }
+    }
+    if (bestCount < n / 3) {      /* sense majoria clara, no ens hi jugam */
         return false;
     }
-    key = tl;
+    key = best;
     return true;
 }
 
