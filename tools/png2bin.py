@@ -125,6 +125,8 @@ def main():
             return 1
         rc = 0
         for st in subs:
+            if not any(is_frame(f) for f in os.listdir(os.path.join(src, st))):
+                continue                 # p.ex. la propia carpeta de sortida
             print('==', st)
             rc |= convert_dir(os.path.join(src, st), os.path.join(dst, st))
         return rc
