@@ -90,14 +90,9 @@ def is_frame(name):
     return ext.lower() == '.png' and stem.isdigit() and not name.startswith('.')
 
 
-def main():
-    if len(sys.argv) < 3:
-        print(__doc__)
-        return 1
-    src = sys.argv[1]
-    dst = sys.argv[2]
+def convert_dir(src, dst):
+    """Converteix una carpeta de PNG NN.png a dst/NN.bin. Retorna 0 si va be."""
     os.makedirs(dst, exist_ok=True)
-
     pngs = sorted((f for f in os.listdir(src) if is_frame(f)),
                   key=lambda s: int(os.path.splitext(s)[0]))
     if not pngs:
@@ -111,6 +106,29 @@ def main():
         print('    %s -> %02d.bin  (fons tret: %d px)' % (name, i, removed))
     print('  %u frames  %dx%d  ->  %s' % (len(pngs), w, h, dst))
     return 0
+
+
+def main():
+    if len(sys.argv) < 3:
+        print(__doc__)
+        return 1
+    src = sys.argv[1]
+    dst = sys.argv[2]
+
+    # Si la carpeta no te PNG pero si subcarpetes (IDLE/, HAPPY/...), les
+    # convertim totes: aixi n'hi ha prou amb "png2bin.py Assets Assets/bin".
+    if not any(is_frame(f) for f in os.listdir(src)):
+        subs = [d for d in sorted(os.listdir(src))
+                if os.path.isdir(os.path.join(src, d))]
+        if not subs:
+            print('  (ni PNG ni subcarpetes a %s)' % src)
+            return 1
+        rc = 0
+        for st in subs:
+            print('==', st)
+            rc |= convert_dir(os.path.join(src, st), os.path.join(dst, st))
+        return rc
+    return convert_dir(src, dst)
 
 
 if __name__ == '__main__':
