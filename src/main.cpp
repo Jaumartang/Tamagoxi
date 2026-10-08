@@ -1332,6 +1332,8 @@ void handleCommand(char* cmd)
         } else {
             Games::printStatus();
         }
+    } else if (strcmp(cmd, "gfx") == 0) {
+        startPetTest(gHomeBg);           /* pantalla de proves de grafics ✓ */
     } else if (strcmp(cmd, "joc") == 0) {
         Panels::open(Panels::Id::Games);
         if (arg != nullptr) {
@@ -1810,17 +1812,25 @@ void loop()
     } else if (gScreen == Screen::PetTest) {
         if (SpriteRenderer::isActive()) {
             if (tap) {
-                Serial.printf("[PET] animacio -> %s\n", SpriteRenderer::nextAnimation());
+                /* TEST DE GRAFICS: tocar el drac canvia d'animacio; tocar fora
+                 * canvia de fons. Aixi es pot repassar-ho tot sense reflashejar. */
+                const SpriteRenderer::Status& st = SpriteRenderer::status();
+                const bool onPet = (x >= st.x && x < st.x + st.boxW &&
+                                    y >= st.y && y < st.y + st.boxH);
+                if (onPet) {
+                    Serial.printf("[GFX] animacio -> %s\n", SpriteRenderer::nextAnimation());
+                } else {
+                    const SdAssets::Backgrounds& bgs = SdAssets::backgrounds();
+                    if (bgs.count > 0) {
+                        gBgIndex = static_cast<uint8_t>((gBgIndex + 1) % bgs.count);
+                        SpriteRenderer::setBackground(bgs.names[gBgIndex]);
+                        Serial.printf("[GFX] fons -> %s\n", bgs.names[gBgIndex]);
+                    }
+                }
                 SpriteRenderer::drawFrame();
                 gPetAnimTimer = millis();
             } else {
                 SpriteRenderer::update(millis());
-            }
-
-            if (millis() - gPetAnimTimer >= PET_ANIM_SWITCH_MS) {
-                gPetAnimTimer = millis();
-                Serial.printf("[PET] animacio -> %s\n", SpriteRenderer::nextAnimation());
-                SpriteRenderer::drawFrame();
             }
 
             if (millis() - gPetOverlayTimer >= 500) {

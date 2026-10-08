@@ -27,10 +27,31 @@ uint32_t gFrameTimer  = 0;
 char     gBgName[24]  = {0};
 constexpr uint8_t kMinScale = 1;
 constexpr uint8_t kMaxScale = 3;
+/* Marge de moviment de la mascota (en pixels d'sprite): el rectangle a pantalla
+ * s'engrandeix una mica perque el drac pugui saltar/botar sense sortir-se'n ni
+ * quedar tallat. El fons del rectangle es repinta a cada frame, aixi que el
+ * moviment no deixa rastre ni parpelleig. */
+constexpr int8_t  kMoveMaxX = 16;
+constexpr int8_t  kMoveMaxY = 16;
+constexpr int16_t kPadX     = kMoveMaxX * 2;   /* marge total horitzontal */
+constexpr int16_t kPadY     = kMoveMaxY;       /* marge vertical (cap amunt) */
 
 uint8_t  gScale       = PET_SCALE;
 uint8_t  gMaxScale    = kMaxScale;   /* maxima escala que cap a la pantalla */
 void   (*gBandHook)() = nullptr;     /* mostreig del tactil entre franges */
+
+/* Moviment de la mascota (en pixels d'sprite) i com es mou segons l'estat. */
+int8_t   gMoveX = 0;
+int8_t   gMoveY = 0;
+bool     gFlip  = false;             /* mirall: mira cap a l'esquerra */
+enum class Act : uint8_t { Still, Patrol, Bounce };
+Act      gAct        = Act::Still;
+uint32_t gActUntil   = 0;
+uint32_t gBobUntil   = 0;
+uint32_t gMoveT0     = 0;
+bool     gPatrolNext = false;
+uint32_t gMoveTimer  = 0;
+constexpr uint32_t kMoveStepMs = 60;   /* refresc del moviment (~16 fps) */
 
 bool ieq(const char* a, const char* b)
 {
@@ -86,17 +107,18 @@ bool begin()
 
     gScale = (PET_SCALE < kMinScale) ? kMinScale
                                      : ((PET_SCALE > gMaxScale) ? gMaxScale : PET_SCALE);
-    gStatus.boxW = static_cast<uint16_t>(pet.width * gScale);
-    gStatus.boxH = static_cast<uint16_t>(pet.height * gScale);
+    gStatus.boxW = static_cast<uint16_t>((pet.width + kPadX) * gScale);
+    gStatus.boxH = static_cast<uint16_t>((pet.height + kPadY) * gScale);
     gStatus.x = static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X);
-    gStatus.y = static_cast<int16_t>(PET_AREA_TOP);
+    gStatus.y = static_cast<int16_t>(PET_AREA_TOP - kPadY * gScale);
     gStatus.fps = pet.fps ? pet.fps : 6;
     gStatus.frameCount = pet.anims[0].frames;
 
     const size_t spriteBytes = static_cast<size_t>(pet.width) * pet.height * 2u;
     const size_t bgBytes = static_cast<size_t>(SCREEN_W) * BG_BAND_LINES * 2u;
     /* Buffer de composicio dels valors maxes (escala maxima) per no reallocar. */
-    const size_t compBytes = static_cast<size_t>(pet.width) * gMaxScale * BG_BAND_LINES * 2u;
+    const size_t compBytes = static_cast<size_t>(pet.width + kPadX) * gMaxScale
+                             * BG_BAND_LINES * 2u;
 
     gSpriteFrame = static_cast<uint8_t*>(heap_caps_malloc(spriteBytes, MALLOC_CAP_DMA));
     gBgBand = static_cast<uint8_t*>(heap_caps_malloc(bgBytes, MALLOC_CAP_DMA));
@@ -163,9 +185,10 @@ void setScale(uint8_t s)
     if (s > gMaxScale) { s = gMaxScale; }
     gScale = s;
     if (!gStatus.active) { return; }
-    gStatus.boxW = static_cast<uint16_t>(gStatus.spriteW * s);
-    gStatus.boxH = static_cast<uint16_t>(gStatus.spriteH * s);
-    setPosition(static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X), gStatus.y);
+    gStatus.boxW = static_cast<uint16_t>((gStatus.spriteW + kPadX) * s);
+    gStatus.boxH = static_cast<uint16_t>((gStatus.spriteH + kPadY) * s);
+    setPosition(static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X),
+                static_cast<int16_t>(PET_AREA_TOP - kPadY * s));
 }
 
 uint8_t scale()
@@ -193,7 +216,7 @@ void resetLayout()
     }
     setScale(PET_SCALE);
     setPosition(static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X),
-                static_cast<int16_t>(PET_AREA_TOP));
+                static_cast<int16_t>(PET_AREA_TOP - kPadY * gScale));
 }
 
 uint16_t boxWidth()
@@ -272,7 +295,7 @@ bool suspend()
     }
     const size_t spriteBytes = static_cast<size_t>(gStatus.spriteW) * gStatus.spriteH * 2u;
     const size_t bgBytes     = static_cast<size_t>(SCREEN_W) * BG_BAND_LINES * 2u;
-    const size_t compBytes   = static_cast<size_t>(gStatus.spriteW) * gMaxScale
+    const size_t compBytes   = static_cast<size_t>(gStatus.spriteW + kPadX) * gMaxScale
                                * BG_BAND_LINES * 2u;
     freeBuffers();
     gSuspended    = true;
@@ -305,6 +328,97 @@ bool resume()
 bool suspended()
 {
     return gSuspended;
+}
+
+/* Segons l'estat de la mascota decideix com es mou: quiet, botet o volta.
+ * Retorna true si el desplacament ha canviat (cal repintar el rectangle). */
+bool stepBehaviour(uint32_t now)
+{
+    const SdAssets::Pet& pet = SdAssets::pet(0);
+    const char* name = (gAnimIndex >= 0 && gAnimIndex < static_cast<int8_t>(pet.animCount))
+                       ? pet.anims[gAnimIndex].name : "";
+
+    Act want = Act::Patrol;
+    if (ieq(name, "SAD") || ieq(name, "SLEEP") || ieq(name, "SICK") ||
+        ieq(name, "HUNGRY") || ieq(name, "ANGRY") || ieq(name, "EAT") ||
+        ieq(name, "DRINK")) {
+        want = Act::Still;              /* trist, dormit, malalt...: quiet ✓ */
+    } else if (ieq(name, "HAPPY") || ieq(name, "PLAY") || ieq(name, "LOVE") ||
+               ieq(name, "CELEBRATE") || ieq(name, "CURIOUS")) {
+        want = Act::Bounce;             /* content: botet al lloc ✓ */
+    }
+    if (want != gAct) {
+        gAct = want;
+        gMoveT0 = now;
+        gActUntil = now + 1500;
+        gPatrolNext = true;
+        gBobUntil = now + 1200;
+    }
+
+    const int8_t px = gMoveX;
+    const int8_t py = gMoveY;
+    const bool   pf = gFlip;
+    gMoveX = 0;
+    gMoveY = 0;
+    gFlip  = false;
+
+    if (gAct == Act::Bounce) {
+        /* Botet al lloc: puja i baixa sense moure's de costat ✓ */
+        const uint32_t half = 700u;
+        const uint32_t ph = (now - gMoveT0) % (2u * half);
+        const uint32_t up = (ph < half) ? ph : (2u * half - ph);
+        gMoveY = -static_cast<int8_t>((static_cast<uint32_t>(kMoveMaxY) * up) / (2u * half));
+    } else if (gAct == Act::Patrol) {
+        /* Pausa, salt a la dreta, pausa, tornada, salt a l'esquerra (AMB MIRALL),
+         * pausa i tornada. Amb pauses llargues i aleatories entre voltes. */
+        if (now >= gActUntil) {
+            if (gPatrolNext) {
+                gMoveT0 = now;
+                gActUntil = now + 6600;
+                gPatrolNext = false;
+            } else {
+                gActUntil = now + 3000u + static_cast<uint32_t>(random(0, 6500));
+                gPatrolNext = true;
+            }
+        }
+        const uint32_t p = (now - gMoveT0) % 6600u;
+        int  dx = 0;
+        uint32_t hopStart = 0;
+        uint32_t hopLen = 0;
+        if (p < 1200) {                                 /* pausa al centre */
+            gFlip = false;                              /* mira cap a la dreta */
+        } else if (p < 2400) {                          /* cap a la dreta */
+            dx = (kMoveMaxX * static_cast<int>(p - 1200)) / 1200;
+            hopStart = 1200;
+            hopLen = 1200;
+        } else if (p < 3200) {                          /* pausa a la dreta */
+            dx = kMoveMaxX;
+            gFlip = true;                               /* gira i mira a l'esquerra */
+        } else if (p < 4400) {                          /* tornada al centre */
+            dx = kMoveMaxX - (kMoveMaxX * static_cast<int>(p - 3200)) / 1200;
+            hopStart = 3200;
+            hopLen = 1200;
+            gFlip = true;                               /* MIRALL ✓ */
+        } else if (p < 5400) {                          /* cap a l'esquerra */
+            dx = -(kMoveMaxX * static_cast<int>(p - 4400)) / 1000;
+            hopStart = 4400;
+            hopLen = 1000;
+            gFlip = true;                               /* MIRALL ✓ */
+        } else if (p < 6200) {                          /* pausa a l'esquerra */
+            dx = -kMoveMaxX;
+            gFlip = false;                              /* gira i mira a la dreta */
+        } else {                                        /* tornada al centre */
+            dx = -kMoveMaxX + (kMoveMaxX * static_cast<int>(p - 6200)) / 400;
+            hopStart = 6200;
+            hopLen = 400;
+        }
+        gMoveX = static_cast<int8_t>(dx);
+        if (hopLen > 0) {                               /* el botet */
+            const float t = static_cast<float>(p - hopStart) / static_cast<float>(hopLen);
+            gMoveY = -static_cast<int8_t>(kMoveMaxY * sinf(t * 3.14159265f));
+        }
+    }
+    return (px != gMoveX) || (py != gMoveY) || (pf != gFlip);
 }
 
 uint32_t drawFrame()
@@ -387,21 +501,30 @@ uint32_t drawFrame()
         uint16_t* comp = reinterpret_cast<uint16_t*>(gComp);
         for (uint16_t r = 0; r < lines; ++r) {
             const uint16_t outRow = static_cast<uint16_t>(oy + r);
-            const uint16_t sRow = static_cast<uint16_t>(outRow / N);  /* vei mes proxim */
-            const uint16_t* sRowPtr = reinterpret_cast<const uint16_t*>(gSpriteFrame)
-                                      + static_cast<size_t>(sRow) * SW;
             const uint16_t* bgRow = bgWords + static_cast<size_t>(r) * bgW + bx;
             uint16_t* outRowPtr = comp + static_cast<size_t>(r) * boxW;
 
             memcpy(outRowPtr, bgRow, static_cast<size_t>(boxW) * 2u);
 
+            /* Fila de l'sprite que toca (tenint en compte el desplacament). */
+            const int16_t srow = (static_cast<int16_t>(outRow)
+                                  - (kPadY + gMoveY) * N) / N;
+            if (srow < 0 || srow >= static_cast<int16_t>(pet.height)) {
+                continue;                       /* aquesta fila es nomes fons */
+            }
+            const uint16_t* sRowPtr = reinterpret_cast<const uint16_t*>(gSpriteFrame)
+                                      + static_cast<size_t>(srow) * SW;
+            /* Columna on comenca el drac dins el rectangle (marge + desplacament). */
+            const int16_t xoff = (kMoveMaxX + gMoveX) * N;
+
             for (uint16_t sx = 0; sx < SW; ++sx) {
-                const uint16_t sv = sRowPtr[sx];
+                /* Amb mirall llegim la columna al reves ✓ */
+                const uint16_t sv = sRowPtr[gFlip ? (SW - 1 - sx) : sx];
                 if ((hasFrameBack && sv == frameBack) ||
                     (pet.hasTransparent && sv == transparent)) {
                     continue;
                 }
-                uint16_t* dst = outRowPtr + static_cast<size_t>(sx) * N;
+                uint16_t* dst = outRowPtr + xoff + static_cast<size_t>(sx) * N;
                 for (uint8_t k = 0; k < N; ++k) {
                     dst[k] = sv;
                 }
@@ -440,14 +563,24 @@ uint32_t update(uint32_t nowMs)
     if (!gStatus.active || gAnimIndex < 0) {
         return 0;
     }
+    /* El moviment es recalcula com a molt cada kMoveStepMs (per no ofegar res). */
+    bool moved = false;
+    if (gMoveTimer == 0 || (nowMs - gMoveTimer) >= kMoveStepMs) {
+        gMoveTimer = nowMs;
+        moved = stepBehaviour(nowMs);
+    }
+
     const uint32_t interval = gStatus.fps ? (1000u / gStatus.fps) : 167u;
-    if (gFrameTimer != 0 && (nowMs - gFrameTimer) < interval) {
+    const bool frameDue = (gFrameTimer == 0) || ((nowMs - gFrameTimer) >= interval);
+    if (!moved && !frameDue) {
         return 0;
     }
-    gFrameTimer = nowMs;
     const uint32_t ms = drawFrame();
-    gStatus.frameIndex = gFrame;
-    gFrame = static_cast<uint8_t>((gFrame + 1) % gStatus.frameCount);
+    if (frameDue) {
+        gFrameTimer = nowMs;
+        gStatus.frameIndex = gFrame;
+        gFrame = static_cast<uint8_t>((gFrame + 1) % gStatus.frameCount);
+    }
     return ms;
 }
 
