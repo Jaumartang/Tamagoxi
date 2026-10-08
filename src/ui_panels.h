@@ -33,6 +33,7 @@ struct Hooks {
     void (*setBackground)(const char* name, bool autoBg);
     bool (*isAuto)(void);
     const char* (*currentName)(void);
+    void (*startGfxTest)(void);      /* obre la pantalla de proves de grafics ✓ */
 };
 
 void setHooks(const Hooks& hooks);

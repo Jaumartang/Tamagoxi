@@ -64,6 +64,7 @@ enum class Screen : uint8_t { Home, Gallery, TouchTest, PetTest, Static };
 Screen   gScreen = Screen::Static;
 uint8_t  gBgIndex = 0;
 uint32_t gBgTimer = 0;
+bool     gGfxPending = false;      /* boto "Test grafics" del menu premut ✓ */
 bool     gTouchWasPressed = false;
 uint32_t gMsgPanelMs      = 0;      /* quan s'ha obert la finestra de missatge */
 uint32_t gNoticeMs        = 0;      /* ultim avis de la mascota */
@@ -1547,7 +1548,8 @@ void setup()
     Audio::scan();
 
     /* Els panells (ajustos) poden canviar el fons a traves d'aquests hooks. */
-    Panels::Hooks hooks = {panelSetBackground, panelIsAutoBackground, panelBackgroundName};
+    Panels::Hooks hooks = {panelSetBackground, panelIsAutoBackground, panelBackgroundName,
+                           []() { gGfxPending = true; }};
     Panels::setHooks(hooks);
     Notify::begin();
     Games::begin();
@@ -1592,6 +1594,14 @@ void loop()
         pollSerial();         /* la consola nomes escolta si l'enllac esta aturat */
     }
     Link::update();       /* parla amb el xip amic (ping + respostes) */
+
+    /* Boto "Test grafics" del desplegable: obrim la pantalla de proves. Ho fem
+     * aqui (i no dins del toc) per no re-entrar dins dels panells. */
+    if (gGfxPending) {
+        gGfxPending = false;
+        closePanels();
+        startPetTest(gHomeBg);
+    }
 
     /* Missatge del mobil: si n'ha arribat algun, s'obre la finestreta. */
     if (gScreen == Screen::Home && !Panels::isOpen() && Notify::takeNew()) {

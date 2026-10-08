@@ -37,7 +37,7 @@ constexpr int kMenuY = UI_HUD_H;
 constexpr int kMenuW = 208;
 constexpr int kRowH  = 44;
 constexpr int kRowGap = 4;
-constexpr int kMenuRows = 7;
+constexpr int kMenuRows = 8;
 constexpr int kMenuH = 4 + kMenuRows * kRowH + (kMenuRows - 1) * kRowGap + 4;   /* 244 */
 
 /* --- Panell de musica ------------------------------------------------------ */
@@ -252,6 +252,15 @@ void iconInfo(int cx, int cy)
     t.fillRect(cx - 1, cy - 1, 3, 7, kText);
 }
 
+/* Ull: pantalla de proves de grafics. */
+void iconEye(int cx, int cy)
+{
+    TFT_eSPI& t = tft();
+    t.drawCircle(cx, cy, 11, kText);
+    t.fillCircle(cx, cy, 5, Ui::colorRow(1));
+    t.fillCircle(cx + 2, cy - 2, 2, kText);
+}
+
 /* Sobre (carta) per al menu de missatges. */
 void iconMail(int cx, int cy)
 {
@@ -311,7 +320,7 @@ void drawTopMenu()
     Ui::glassCard(kMenuX, kMenuY, kMenuW, kMenuH, 0xFFFF, 66, 14);
 
     const char* labels[kMenuRows] = {"WiFi", "Musica", "Bluetooth", "Missatges",
-                                     "Jocs", "Ajustos", "Sobre"};
+                                     "Jocs", "Ajustos", "Test grafics", "Sobre"};
     for (int i = 0; i < kMenuRows; ++i) {
         const int x = kMenuX + 4;
         const int y = kMenuY + 4 + i * (kRowH + kRowGap);
@@ -328,6 +337,7 @@ void drawTopMenu()
             case 3: iconMail(icx, icy); break;
             case 4: iconGame(icx, icy); break;
             case 5: iconSliders(icx, icy); break;
+            case 6: iconEye(icx, icy); break;
             default: iconInfo(icx, icy); break;
         }
 
@@ -1844,6 +1854,11 @@ bool handleTap(int16_t x, int16_t y)
                     case 3: showMessages(); break;
                     case 4: showGames(); break;
                     case 5: showSettings(); break;
+                    case 6:
+                        if (gHooks.startGfxTest != nullptr) {
+                            gHooks.startGfxTest();
+                        }
+                        break;
                     default: showAbout(); break;
                 }
                 return true;
