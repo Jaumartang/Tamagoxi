@@ -640,6 +640,56 @@ void probeFrame()
     Serial.println();
 }
 
+/* --- Diagnostica: analitza TOTS els frames de l'animacio actual --------- */
+
+void scanAnim()
+{
+    const SdAssets::Pet& p = pet();
+    if (gFrameBuf == nullptr || p.animCount == 0 || gAnim >= p.animCount) {
+        Serial.println(F("[SCAN] res a mirar (falta la SD?)"));
+        return;
+    }
+    const auto sw = [](uint16_t v) { return static_cast<uint16_t>((v >> 8) | (v << 8)); };
+    const uint8_t nf = p.anims[gAnim].frames;
+    Serial.printf("[SCAN] %s: %u frames de %ux%u\n", p.anims[gAnim].name,
+                  static_cast<unsigned>(nf), p.width, p.height);
+    for (uint8_t f = 0; f < nf; ++f) {
+        const char* err = nullptr;
+        if (!SdAssets::readPetFrame(0, p.anims[gAnim].name, f, gFrameBuf,
+                                    static_cast<size_t>(p.width) * p.height * 2u, &err)) {
+            Serial.printf("   %2u: no llegit (%s)\n", f, err != nullptr ? err : "?");
+            continue;
+        }
+        const uint16_t* b = reinterpret_cast<const uint16_t*>(gFrameBuf);
+        uint16_t key = 0;
+        const bool hasKey = SdAssets::frameKey(b, p.width, p.height, key);
+        /* Mirem les 4 columnes de cada costat, una per una: aixi veiem
+         * exactament quina columna te pixels que no son el fons. */
+        int edge[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        int white = 0;
+        uint16_t strayColor = 0;
+        for (int y = 0; y < p.height; ++y) {
+            for (int k = 0; k < 4; ++k) {
+                const uint16_t vl = b[y * p.width + k];
+                const uint16_t vr = b[y * p.width + p.width - 1 - k];
+                if (!hasKey || vl != key) {
+                    ++edge[k];
+                    if (strayColor == 0) { strayColor = sw(vl); }
+                }
+                if (!hasKey || vr != key) {
+                    ++edge[4 + k];
+                    if (strayColor == 0) { strayColor = sw(vr); }
+                }
+                if (sw(vl) == 0xFFFF || sw(vr) == 0xFFFF) { ++white; }
+            }
+        }
+        Serial.printf("   %2u: fons=%04X  L0..3=%d,%d,%d,%d  R0..3=%d,%d,%d,%d  blancs=%d 1r=%04X\n",
+                      f, sw(key), edge[0], edge[1], edge[2], edge[3],
+                      edge[4], edge[5], edge[6], edge[7], white, strayColor);
+    }
+    Serial.println(F("[SCAN] fi"));
+}
+
 /* --- Consola minima (per pilotar-lo des del PC o des del mobil) --------- */
 
 void pollSerial()
@@ -685,6 +735,11 @@ void pollSerial()
                 writeManifest();
             } else if (strcmp(line, "probe") == 0) {
                 probeFrame();
+            } else if (strcmp(line, "scan") == 0) {
+                scanAnim();
+            } else if (strncmp(line, "ls", 2) == 0) {
+                const char* p2 = (line[2] == ' ') ? (line + 3) : "/";
+                SdAssets::printTree(Serial, p2, 3);
             } else if (strcmp(line, "tab") == 0) {
                 gTab = (gTab == Tab::Bg) ? Tab::Anim : Tab::Bg;
                 drawAll();
