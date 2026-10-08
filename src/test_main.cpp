@@ -686,6 +686,26 @@ void scanAnim()
         Serial.printf("   %2u: fons=%04X  L0..3=%d,%d,%d,%d  R0..3=%d,%d,%d,%d  blancs=%d 1r=%04X\n",
                       f, sw(key), edge[0], edge[1], edge[2], edge[3],
                       edge[4], edge[5], edge[6], edge[7], white, strayColor);
+        /* I ara TOTA la imatge: quants pixels blancs/clars hi ha i on es el 1r */
+        int wwhite = 0;
+        int wlight = 0;
+        int wx = -1;
+        int wy = -1;
+        for (int y = 0; y < p.height; ++y) {
+            for (int x = 0; x < p.width; ++x) {
+                const uint16_t v = sw(b[y * p.width + x]);
+                if (v == 0xFFFF) {
+                    ++wwhite;
+                    if (wx < 0) { wx = x; wy = y; }
+                } else {
+                    const int r = (v >> 11) & 0x1F;
+                    const int g = (v >> 5) & 0x3F;
+                    const int bl = v & 0x1F;
+                    if (r >= 28 && g >= 56 && bl >= 28) { ++wlight; }
+                }
+            }
+        }
+        Serial.printf("       blancs_tot=%d  clars=%d  1r_blanc=(%d,%d)\n", wwhite, wlight, wx, wy);
     }
     Serial.println(F("[SCAN] fi"));
 }
