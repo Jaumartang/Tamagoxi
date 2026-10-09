@@ -4,8 +4,16 @@
  "fps": 6,
  "transparent": "0xF81F",
  "animations": {
+  "ANGRY": 10,
+  "CELEBRATE": 10,
+  "CLEAN": 10,
+  "EAT": 10,
   "HAPPY": 10,
+  "HUNGRY": 10,
   "IDLE": 10,
-  "SAD": 10
+  "PLAY": 10,
+  "SAD": 10,
+  "SICK": 10,
+  "SLEEP": 10
  }
 }

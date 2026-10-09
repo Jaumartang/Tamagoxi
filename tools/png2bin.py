@@ -15,11 +15,13 @@ Us:
 """
 
 import os
+import re
 import sys
 
 from PIL import Image
 
 TRANS = 0xF81F          # magenta: el color transparent que enten el firmware
+MARGIN = 6              # px d'aire minim que volem al voltant del drac
 
 
 def is_magenta(r, g, b):
@@ -34,9 +36,34 @@ def rgb565(r, g, b):
     return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3)
 
 
+def inset_if_touches_edge(im, margin=MARGIN):
+    """Si el sprite toca la vora del marc, l'encongeix i el recentra perque
+    quedi 'margin' px d'aire al voltant (aixi no queda mai tallat)."""
+    alpha = im.getchannel('A')
+    bbox = alpha.getbbox()
+    if bbox is None:
+        return im, False
+    x0, y0, x1, y1 = bbox
+    w, h = im.size
+    if x0 >= margin and y0 >= margin and x1 <= w - margin and y1 <= h - margin:
+        return im, False                    # ja hi ha prou aire ✓
+
+    # Encongeix el sprite perque el seu quadre capiga dins el marc - marge.
+    bw = x1 - x0
+    bh = y1 - y0
+    fit = min((w - 2 * margin) / bw, (h - 2 * margin) / bh, 1.0)
+    nw = max(1, int(bw * fit))
+    nh = max(1, int(bh * fit))
+    crop = im.crop(bbox).resize((nw, nh), Image.LANCZOS)
+    out = Image.new('RGBA', (w, h), (255, 0, 255, 0))
+    out.paste(crop, ((w - nw) // 2, (h - nh) // 2), crop)
+    return out, True
+
+
 def convert_file(path, out_path):
-    """Retorna (w, h, pixels_de_fons_trets)."""
+    """Retorna (w, h, pixels_de_fons_trets, si_s_ha_retocat)."""
     im = Image.open(path).convert('RGBA')
+    im, inset = inset_if_touches_edge(im)
     w, h = im.size
     px = im.load()
 
@@ -81,30 +108,41 @@ def convert_file(path, out_path):
             out[i * 2 + 1] = v & 0xFF
     with open(out_path, 'wb') as f:
         f.write(out)
-    return w, h, sum(bg)
+    return w, h, sum(bg), inset
 
 
-def is_frame(name):
-    """Nomes "NN.png" (tot digits): ignora els muntatges i la brossa del Mac."""
+def frame_index(name):
+    """Si el fitxer es "NN.png" o "<prefix>_NN.png", retorna l'index N;
+    si no, -1 (aixi ignora muntatges, brossa del Mac i qualsevol altre)."""
     stem, ext = os.path.splitext(name)
-    return ext.lower() == '.png' and stem.isdigit() and not name.startswith('.')
+    if ext.lower() != '.png' or name.startswith('.'):
+        return -1
+    if stem.isdigit():
+        return int(stem)
+    match = re.search(r'_(\d+)$', stem)
+    return int(match.group(1)) if match else -1
 
 
 def convert_dir(src, dst):
     """Converteix una carpeta de PNG NN.png a dst/NN.bin. Retorna 0 si va be."""
     os.makedirs(dst, exist_ok=True)
-    pngs = sorted((f for f in os.listdir(src) if is_frame(f)),
-                  key=lambda s: int(os.path.splitext(s)[0]))
+    pngs = sorted((f for f in os.listdir(src) if frame_index(f) >= 0),
+                  key=frame_index)
     if not pngs:
-        print('  (cap PNG NN.png a %s)' % src)
+        print('  (cap PNG NN.png o <nom>_NN.png a %s)' % src)
         return 1
 
     w = h = 0
+    inset_count = 0
     for i, name in enumerate(pngs):
-        w, h, removed = convert_file(os.path.join(src, name),
-                                     os.path.join(dst, '%02d.bin' % i))
-        print('    %s -> %02d.bin  (fons tret: %d px)' % (name, i, removed))
-    print('  %u frames  %dx%d  ->  %s' % (len(pngs), w, h, dst))
+        w, h, removed, inset = convert_file(os.path.join(src, name),
+                                            os.path.join(dst, '%02d.bin' % i))
+        if inset:
+            inset_count += 1
+        print('    %s -> %02d.bin  (fons tret: %d px%s)' % (name, i, removed,
+              ', retocat' if inset else ''))
+    print('  %u frames  %dx%d  ->  %s%s' % (len(pngs), w, h, dst,
+          '' if inset_count == 0 else f'  ({inset_count} retocats)'))
     return 0
 
 
@@ -117,7 +155,7 @@ def main():
 
     # Si la carpeta no te PNG pero si subcarpetes (IDLE/, HAPPY/...), les
     # convertim totes: aixi n'hi ha prou amb "png2bin.py Assets Assets/bin".
-    if not any(is_frame(f) for f in os.listdir(src)):
+    if not any(frame_index(f) >= 0 for f in os.listdir(src)):
         subs = [d for d in sorted(os.listdir(src))
                 if os.path.isdir(os.path.join(src, d))]
         if not subs:
@@ -125,7 +163,8 @@ def main():
             return 1
         rc = 0
         for st in subs:
-            if not any(is_frame(f) for f in os.listdir(os.path.join(src, st))):
+            if not any(frame_index(f) >= 0
+                       for f in os.listdir(os.path.join(src, st))):
                 continue                 # p.ex. la propia carpeta de sortida
             print('==', st)
             rc |= convert_dir(os.path.join(src, st), os.path.join(dst, st))
