@@ -110,7 +110,8 @@ bool begin()
     gStatus.boxW = static_cast<uint16_t>((pet.width + kPadX) * gScale);
     gStatus.boxH = static_cast<uint16_t>((pet.height + kPadY) * gScale);
     gStatus.x = static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X);
-    gStatus.y = static_cast<int16_t>(PET_AREA_TOP - kPadY * gScale);
+    /* Els peus descansen SOBRE la franja de barres (el "terra"), no enlaire. */
+    gStatus.y = static_cast<int16_t>(UI_BARS_TOP - gStatus.boxH);
     gStatus.fps = pet.fps ? pet.fps : 6;
     gStatus.frameCount = pet.anims[0].frames;
 
@@ -188,7 +189,7 @@ void setScale(uint8_t s)
     gStatus.boxW = static_cast<uint16_t>((gStatus.spriteW + kPadX) * s);
     gStatus.boxH = static_cast<uint16_t>((gStatus.spriteH + kPadY) * s);
     setPosition(static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X),
-                static_cast<int16_t>(PET_AREA_TOP - kPadY * s));
+                static_cast<int16_t>(UI_BARS_TOP - gStatus.boxH));
 }
 
 uint8_t scale()
@@ -216,7 +217,7 @@ void resetLayout()
     }
     setScale(PET_SCALE);
     setPosition(static_cast<int16_t>((SCREEN_W - gStatus.boxW) / 2 + PET_OFFSET_X),
-                static_cast<int16_t>(PET_AREA_TOP - kPadY * gScale));
+                static_cast<int16_t>(UI_BARS_TOP - gStatus.boxH));
 }
 
 uint16_t boxWidth()
@@ -570,18 +571,47 @@ uint32_t update(uint32_t nowMs)
         moved = stepBehaviour(nowMs);
     }
 
-    const uint32_t interval = gStatus.fps ? (1000u / gStatus.fps) : 167u;
+    /* Els frames no van sempre en bucle: el ritme varia i, de tant en tant,
+     * en salta un, tria un a l'atzar o es queda una estona al mateix frame.
+     * Quan l'estat es quiet (dormint, menjant...) va mes a poc a poc. */
+    const uint32_t base = gStatus.fps ? (1000u / gStatus.fps) : 167u;
+    uint32_t pace = 70u + static_cast<uint32_t>(random(0, 120));   /* 0.7x .. 1.9x */
+    if (gAct == Act::Still) {
+        pace = 160u + static_cast<uint32_t>(random(0, 120));       /* mes lent */
+    }
+    const uint32_t interval = base * pace / 100u;
+
     const bool frameDue = (gFrameTimer == 0) || ((nowMs - gFrameTimer) >= interval);
     if (!moved && !frameDue) {
         return 0;
     }
-    const uint32_t ms = drawFrame();
+
+    bool frameChanged = false;
     if (frameDue) {
         gFrameTimer = nowMs;
         gStatus.frameIndex = gFrame;
-        gFrame = static_cast<uint8_t>((gFrame + 1) % gStatus.frameCount);
+        const uint8_t n = gStatus.frameCount;
+        const uint8_t r = static_cast<uint8_t>(random(0, 100));
+        uint8_t nf = gFrame;
+        if (r < 60) {
+            nf = static_cast<uint8_t>((gFrame + 1) % n);     /* seguent */
+        } else if (r < 75) {
+            nf = static_cast<uint8_t>((gFrame + 2) % n);     /* en salta un */
+        } else if (r < 85) {
+            nf = gFrame;                                     /* pausa */
+        } else {
+            nf = static_cast<uint8_t>(random(0, n));         /* un a l'atzar */
+        }
+        if (nf != gFrame) {
+            gFrame = nf;
+            frameChanged = true;
+        }
     }
-    return ms;
+
+    if (!moved && !frameChanged) {
+        return 0;
+    }
+    return drawFrame();
 }
 
 const Status& status()
